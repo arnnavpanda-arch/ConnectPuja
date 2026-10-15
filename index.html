@@ -2,7 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="window.addEventListener('message', function(e) {
+    if (e.data &amp;&amp; e.data.type === 'SYNC_CLOUD_DATA') {
+        if (typeof syncUserFromCloud === 'function') syncUserFromCloud();
+        else {
+            if (typeof loadUserData === 'function') loadUserData();
+            if (typeof loadBookings === 'function') loadBookings();
+        }
+    }
+});dth=device-width, initial-scale=1.0">
 <title>PujaConnect | Divine Vedic Services</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <script src="api.js"></script>
@@ -1738,6 +1746,7 @@ tr:hover { background: #fcfcfc; }
 
 &lt;/style&gt;
     &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;api.js&quot;&gt;&lt;/script&gt;
     &lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
 &lt;/head&gt;
 &lt;body&gt;
@@ -2184,32 +2193,45 @@ window.addEventListener(&#x27;message&#x27;, function(e) {
 });
 
 window.onload = function() {
-    let pandits = JSON.parse(localStorage.getItem(&#x27;adminPandits&#x27;) || &#x27;[]&#x27;);
-    let pEmails = new Set(pandits.map(p =&gt; (p.email || &#x27;&#x27;).trim().toLowerCase()));
+    let today = new Date().toISOString().split('T')[0];
+    let dateInp = document.getElementById("newDateInput");
+    if (dateInp) dateInp.setAttribute('min', today);
 
-    if(!currentEmail) {
-        currentEmail = localStorage.getItem(&quot;loggedInUserEmail&quot;);
-    }
-
-    if(!currentEmail) {
-        let users = JSON.parse(localStorage.getItem(&#x27;regularUsers&#x27;) || &#x27;[]&#x27;);
-        let validUser = users.find(u =&gt; u.email &amp;&amp; !pEmails.has(u.email.trim().toLowerCase()));
-        if(validUser) {
-            currentEmail = validUser.email;
-            localStorage.setItem(&#x27;loggedInUserEmail&#x27;, currentEmail);
-        } else {
-            if(window.parent &amp;&amp; window.parent.exitToHome){ window.parent.exitToHome(); } else { window.location.href = &quot;/&quot;; };
-            return;
-        }
-    }
-    
-    // Set min date for rescheduling
-    let today = new Date().toISOString().split(&#x27;T&#x27;)[0];
-    document.getElementById(&quot;newDateInput&quot;).setAttribute(&#x27;min&#x27;, today);
-
+    // Initial render from local cache
     loadUserData();
     loadBookings();
+
+    // Pull directly from MongoDB Atlas Cloud for immediate multi-device synchronization
+    syncUserFromCloud();
 };
+
+async function syncUserFromCloud() {
+    try {
+        if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
+            await PujaAPI.syncAllFromCloud();
+        } else {
+            // Direct fetch fallback from MongoDB endpoints
+            const [uRes, bRes, lpRes] = await Promise.all([
+                fetch('/api/auth/users').then(r =&gt; r.json()).catch(() =&gt; ({})),
+                fetch('/api/bookings').then(r =&gt; r.json()).catch(() =&gt; ({})),
+                fetch('/api/long-pujas').then(r =&gt; r.json()).catch(() =&gt; ({}))
+            ]);
+            if (uRes && uRes.success && Array.isArray(uRes.data) && uRes.data.length &gt; 0) {
+                localStorage.setItem('regularUsers', JSON.stringify(uRes.data));
+            }
+            if (bRes && bRes.success && Array.isArray(bRes.data) && bRes.data.length &gt; 0) {
+                localStorage.setItem('pujaBookings', JSON.stringify(bRes.data));
+            }
+            if (lpRes && lpRes.success && Array.isArray(lpRes.data) && lpRes.data.length &gt; 0) {
+                localStorage.setItem('longPujaRequests', JSON.stringify(lpRes.data));
+            }
+        }
+        loadUserData();
+        loadBookings();
+    } catch(err) {
+        console.warn("syncUserFromCloud error:", err);
+    }
+}
 
 function showAlert(title, message, icon=&quot;✅&quot;) {
     document.getElementById(&#x27;alertTitle&#x27;).innerText = title;
@@ -2330,7 +2352,7 @@ function deleteProfile() {
 
 function loadBookings() {
     allBookings = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;)) || [];
-    let myBookings = allBookings.filter(b =&gt; b.customerEmail === currentEmail);
+    let myBookings = allBookings.filter(b =&gt; b.customerEmail &amp;&amp; currentEmail &amp;&amp; b.customerEmail.trim().toLowerCase() === currentEmail.trim().toLowerCase());
     
     // Convert Dates to compare
     let today = new Date();
@@ -2356,7 +2378,7 @@ function loadBookings() {
 
     // Long Pujas
     let allLongRequests = JSON.parse(localStorage.getItem(&#x27;longPujaRequests&#x27;)) || [];
-    let myLongRequests = allLongRequests.filter(r =&gt; r.userId === currentEmail);
+    let myLongRequests = allLongRequests.filter(r =&gt; (r.userId || r.userEmail) &amp;&amp; currentEmail &amp;&amp; ((r.userId &amp;&amp; r.userId.trim().toLowerCase() === currentEmail.trim().toLowerCase()) || (r.userEmail &amp;&amp; r.userEmail.trim().toLowerCase() === currentEmail.trim().toLowerCase())));
 
     if(myBookings.length === 0 &amp;&amp; myLongRequests.length === 0) {
         upcomingHtml = `&lt;div class=&quot;empty-state&quot; style=&quot;grid-column: 1 / -1;&quot;&gt;&lt;i class=&quot;material-icons&quot;&gt;event_note&lt;/i&gt;&lt;h3&gt;No Bookings Found&lt;/h3&gt;&lt;p&gt;You haven&#x27;t booked any Pujas yet.&lt;/p&gt;&lt;br&gt;&lt;button class=&quot;btn btn-primary&quot; style=&quot;display:inline-block; width:auto; margin:0 auto;&quot; onclick=&quot;document.querySelectorAll(&#x27;.sidebar .menu-item&#x27;)[3].click()&quot;&gt;Explore Pujas&lt;/button&gt;&lt;/div&gt;`;
@@ -3099,7 +3121,7 @@ function findDashboardPandits() {
         let allPandits = JSON.parse(localStorage.getItem(&#x27;adminPandits&#x27;)) || [];
         
         let matches = allPandits.filter(p =&gt; {
-            if(p.status !== &#x27;Fully Verified&#x27;) return false;
+            let pStat = (p.status || &#x27;&#x27;).toLowerCase(); if(pStat !== &#x27;fully verified&#x27; &amp;&amp; pStat !== &#x27;approved&#x27; &amp;&amp; pStat !== &#x27;verified&#x27;) return false;
             if(!p.workingDistricts || !p.workingDistricts.includes(dist)) return false;
             return true;
         });
@@ -3678,6 +3700,7 @@ body{background:var(--bg); color:var(--text); height:100vh; overflow:hidden;}
 
 &lt;/style&gt;
     &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
+    &lt;script src=&quot;api.js&quot;&gt;&lt;/script&gt;
     &lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
 &lt;/head&gt;
 &lt;body&gt;
@@ -4081,65 +4104,109 @@ const INDIA_DATA = {
     &quot;West Bengal&quot;: [&quot;Alipurduar&quot;, &quot;Bankura&quot;, &quot;Birbhum&quot;, &quot;Cooch Behar&quot;, &quot;Dakshin Dinajpur&quot;, &quot;Darjeeling&quot;, &quot;Hooghly&quot;, &quot;Howrah&quot;, &quot;Jalpaiguri&quot;, &quot;Jhargram&quot;, &quot;Kalimpong&quot;, &quot;Kolkata&quot;, &quot;Malda&quot;, &quot;Murshidabad&quot;, &quot;Nadia&quot;, &quot;North 24 Parganas&quot;, &quot;Paschim Bardhaman&quot;, &quot;Paschim Medinipur&quot;, &quot;Purba Bardhaman&quot;, &quot;Purba Medinipur&quot;, &quot;Purulia&quot;, &quot;South 24 Parganas&quot;, &quot;Uttar Dinajpur&quot;]
 };
 
-let pandits = JSON.parse(localStorage.getItem(&#x27;adminPandits&#x27;)) || [];
-let loggedEmail = (localStorage.getItem(&quot;loggedInPanditEmail&quot;) || &#x27;&#x27;).trim().toLowerCase();
+let pandits = JSON.parse(localStorage.getItem('adminPandits')) || [];
+let loggedEmail = (localStorage.getItem("loggedInPanditEmail") || '').trim().toLowerCase();
+let pIndex = -1;
+let currentPandit = {};
 
-if(!loggedEmail) {
-    let firstVerified = pandits.find(x =&gt; x.status === &#x27;Fully Verified&#x27;);
-    loggedEmail = firstVerified ? firstVerified.email.toLowerCase() : &#x27;ramesh@example.com&#x27;;
-    localStorage.setItem(&quot;loggedInPanditEmail&quot;, loggedEmail);
-}
-
-let pIndex = pandits.findIndex(x =&gt; x.email &amp;&amp; x.email.trim().toLowerCase() === loggedEmail);
-if (pIndex === -1) { 
-    if (pandits.length &gt; 0) {
-        loggedEmail = pandits[0].email.toLowerCase();
-        localStorage.setItem(&quot;loggedInPanditEmail&quot;, loggedEmail);
-        pIndex = 0;
-    }
-}
-let currentPandit = pandits[pIndex] || {};
-
-window.onload = function() {
+function resolveCurrentPandit() {
     pandits = JSON.parse(localStorage.getItem('adminPandits')) || [];
     loggedEmail = (localStorage.getItem("loggedInPanditEmail") || loggedEmail || '').trim().toLowerCase();
-    pIndex = pandits.findIndex(x => x.email && x.email.trim().toLowerCase() === loggedEmail);
-    if (pIndex !== -1) {
-        currentPandit = pandits[pIndex];
-    }
-
-    if(!currentPandit || !currentPandit.status) {
-        if(window.parent && window.parent.exitToHome){ window.parent.exitToHome(); } else { window.location.href = "/"; };
-        return;
-    }
-    if(currentPandit.status === &#x27;Stage 1 Approved&#x27; || currentPandit.status === &#x27;Verified&#x27; || currentPandit.status === &#x27;Rejected&#x27; || currentPandit.status === &#x27;Docs Rejected&#x27;) {
-        document.getElementById(&quot;setup-layout&quot;).style.display = &quot;block&quot;;
-        document.getElementById(&quot;uploadCard&quot;).style.display = &quot;block&quot;;
-
-        if(currentPandit.status === &#x27;Rejected&#x27; || currentPandit.status === &#x27;Docs Rejected&#x27;) {
-            document.getElementById(&quot;rejectionBanner&quot;).style.display = &quot;block&quot;;
-            document.getElementById(&quot;uploadCardTitle&quot;).innerText = &quot;Re-upload Documents for Verification&quot;;
-            document.getElementById(&quot;uploadCardSubtitle&quot;).innerText = &quot;Your previous submission was rejected. Please re-upload your Passport Photo &amp; Identity Proof.&quot;;
-            document.getElementById(&quot;submitDocsBtn&quot;).innerText = &quot;Re-submit Documents for Admin Review&quot;;
-            
-            // Pre-fill previously entered experience &amp; specialties if present
-            if(currentPandit.exp) document.getElementById(&quot;expYears&quot;).value = parseInt(currentPandit.exp) || 5;
-            if(currentPandit.specialty) document.getElementById(&quot;specialties&quot;).value = currentPandit.specialty;
+    
+    if (loggedEmail) {
+        pIndex = pandits.findIndex(x =&gt; x.email && x.email.trim().toLowerCase() === loggedEmail);
+        if (pIndex !== -1) {
+            currentPandit = pandits[pIndex];
         }
-    } else if(currentPandit.status === &#x27;Docs Submitted&#x27;) {
-        document.getElementById(&quot;setup-layout&quot;).style.display = &quot;block&quot;;
-        document.getElementById(&quot;pendingCard&quot;).style.display = &quot;block&quot;;
-    } else if(currentPandit.status === &#x27;Fully Verified&#x27;) {
-        document.getElementById(&quot;main-layout&quot;).style.display = &quot;flex&quot;;
-        document.getElementById(&quot;navNameDisplay&quot;).innerText = currentPandit.name;
-        
-        initDashboard();
-    } else {
-        // Fallback: show upload layout
-        document.getElementById(&quot;setup-layout&quot;).style.display = &quot;block&quot;;
-        document.getElementById(&quot;uploadCard&quot;).style.display = &quot;block&quot;;
     }
+    
+    if (!currentPandit || !currentPandit.email) {
+        if (pandits.length &gt; 0) {
+            currentPandit = pandits[0];
+            loggedEmail = currentPandit.email.trim().toLowerCase();
+            localStorage.setItem("loggedInPanditEmail", loggedEmail);
+            pIndex = 0;
+        } else {
+            currentPandit = {
+                name: "Pandit Ji",
+                email: loggedEmail || "pandit@pujaconnect.com",
+                status: "Fully Verified",
+                workingState: "Odisha",
+                workingDistricts: ["Khordha", "Cuttack", "Puri"],
+                pricing: []
+            };
+        }
+    }
+}
+
+resolveCurrentPandit();
+
+function renderPanditUI() {
+    resolveCurrentPandit();
+    
+    let pStat = (currentPandit.status || '').trim().toLowerCase();
+    let setupLay = document.getElementById("setup-layout");
+    let mainLay = document.getElementById("main-layout");
+    let uploadCard = document.getElementById("uploadCard");
+    let pendingCard = document.getElementById("pendingCard");
+    let rejBanner = document.getElementById("rejectionBanner");
+
+    if (pStat === 'stage 1 approved' || pStat === 'rejected' || pStat === 'docs rejected') {
+        if (mainLay) mainLay.style.display = "none";
+        if (setupLay) setupLay.style.display = "block";
+        if (uploadCard) uploadCard.style.display = "block";
+        if (pendingCard) pendingCard.style.display = "none";
+        if (rejBanner && (pStat === 'rejected' || pStat === 'docs rejected')) {
+            rejBanner.style.display = "block";
+        }
+    } else if (pStat === 'docs submitted' || pStat === 'pending review') {
+        if (mainLay) mainLay.style.display = "none";
+        if (setupLay) setupLay.style.display = "block";
+        if (pendingCard) pendingCard.style.display = "block";
+        if (uploadCard) uploadCard.style.display = "none";
+    } else {
+        // Fully Verified, Verified, Approved, or active status
+        if (setupLay) setupLay.style.display = "none";
+        if (mainLay) {
+            mainLay.style.display = "flex";
+            let nameDisp = document.getElementById("navNameDisplay");
+            if (nameDisp) nameDisp.innerText = currentPandit.name || "Pandit Ji";
+            initDashboard();
+        }
+    }
+}
+
+window.onload = function() {
+    renderPanditUI();
+    syncPanditFromCloud();
 };
+
+async function syncPanditFromCloud() {
+    try {
+        if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
+            await PujaAPI.syncAllFromCloud();
+        } else {
+            const [pRes, bRes, lpRes] = await Promise.all([
+                fetch('/api/pandits').then(r =&gt; r.json()).catch(() =&gt; ({})),
+                fetch('/api/bookings').then(r =&gt; r.json()).catch(() =&gt; ({})),
+                fetch('/api/long-pujas').then(r =&gt; r.json()).catch(() =&gt; ({}))
+            ]);
+            if (pRes && pRes.success && Array.isArray(pRes.data) && pRes.data.length &gt; 0) {
+                localStorage.setItem('adminPandits', JSON.stringify(pRes.data));
+            }
+            if (bRes && bRes.success && Array.isArray(bRes.data) && bRes.data.length &gt; 0) {
+                localStorage.setItem('pujaBookings', JSON.stringify(bRes.data));
+            }
+            if (lpRes && lpRes.success && Array.isArray(lpRes.data) && lpRes.data.length &gt; 0) {
+                localStorage.setItem('longPujaRequests', JSON.stringify(lpRes.data));
+            }
+        }
+        renderPanditUI();
+        if (typeof renderBookings === 'function') renderBookings();
+    } catch(err) {
+        console.warn("syncPanditFromCloud error:", err);
+    }
+}
 
 function initDashboard() {
     // 1. Setup State Dropdown
@@ -4195,9 +4262,13 @@ function switchPanditTabMobile(tabId, element) {
     if (cw) cw.scrollTo({ top: 0, behavior: &#x27;smooth&#x27; });
 }
 
-window.addEventListener(&#x27;message&#x27;, function(e) {
-    if (e.data &amp;&amp; e.data.type === &#x27;SYNC_CLOUD_DATA&#x27;) {
-        if (typeof renderBookings === &#x27;function&#x27;) renderBookings();
+window.addEventListener('message', function(e) {
+    if (e.data &amp;&amp; e.data.type === 'SYNC_CLOUD_DATA') {
+        if (typeof syncPanditFromCloud === 'function') syncPanditFromCloud();
+        else {
+            if (typeof renderPanditUI === 'function') renderPanditUI();
+            if (typeof renderBookings === 'function') renderBookings();
+        }
     }
 });
 
@@ -4266,7 +4337,8 @@ function getBookings() {
         ];
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(b));
     }
-    return b.filter(x =&gt; x.panditEmail &amp;&amp; currentPandit.email &amp;&amp; x.panditEmail.trim().toLowerCase() === currentPandit.email.trim().toLowerCase());
+    let cpEmail = (currentPandit.email || (typeof loggedEmail !== undefined ? loggedEmail : ) || ).trim().toLowerCase();
+    return b.filter(x =&gt; x.panditEmail &amp;&amp; cpEmail &amp;&amp; x.panditEmail.trim().toLowerCase() === cpEmail);
 }
 
 function renderBookings() {
@@ -4274,7 +4346,11 @@ function renderBookings() {
     
     // Add Long Puja Requests
     let allLongRequests = JSON.parse(localStorage.getItem(&#x27;longPujaRequests&#x27;)) || [];
-    let myLongRequests = allLongRequests.filter(r =&gt; r.assignedPandits &amp;&amp; r.assignedPandits.includes(currentPandit.email));
+    let cpEmail = (currentPandit.email || (typeof loggedEmail !== undefined ? loggedEmail : ) || ).trim().toLowerCase();
+    let myLongRequests = allLongRequests.filter(r =&gt; {
+        if (!r.assignedPandits || !Array.isArray(r.assignedPandits)) return false;
+        return r.assignedPandits.some(pEmail =&gt; pEmail &amp;&amp; pEmail.trim().toLowerCase() === cpEmail);
+    });
     
     let tbody = document.querySelector(&quot;#bookingsTable tbody&quot;);
     tbody.innerHTML = &quot;&quot;;
@@ -5005,11 +5081,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const hash = window.location.hash.toLowerCase();
     const savedView = localStorage.getItem('activePujaView');
 
-    if (hash === '#user-dashboard' || path.includes('/user-dashboard') || urlParams.get('view') === 'user-dashboard' || (savedView === 'user-dashboard' && localStorage.getItem('loggedInUserEmail'))) {
+    if (hash === '#user-dashboard' || path.includes('/user-dashboard') || urlParams.get('view') === 'user-dashboard' || savedView === 'user-dashboard') {
         openUserDashboard();
         return;
     }
-    if (hash === '#pandit-dashboard' || path.includes('/pandit-dashboard') || urlParams.get('view') === 'pandit-dashboard' || (savedView === 'pandit-dashboard' && localStorage.getItem('loggedInPanditEmail'))) {
+    if (hash === '#pandit-dashboard' || path.includes('/pandit-dashboard') || urlParams.get('view') === 'pandit-dashboard' || savedView === 'pandit-dashboard') {
         openPanditDashboard();
         return;
     }
