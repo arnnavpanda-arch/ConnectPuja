@@ -4517,6 +4517,31 @@ window.addEventListener(&#x27;pujaBookingsUpdated&#x27;, () =&gt; {
 </div>
 
 <script>
+// --- CORE AUTOMATED EMAIL DISPATCHER (INLINED FOR 100% RELIABILITY) ---
+function sendAutomatedEmail(toEmail, type, data = {}) {
+    if (!toEmail) return Promise.resolve(null);
+    console.log(`[PujaConnect Mailer] Dispatching ${type} to: ${toEmail}...`);
+    return fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: toEmail, type: type, data: data })
+    })
+    .then(async res => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.success === false) {
+            console.warn(`[PujaConnect Mailer] Error:`, json);
+            return { success: false, error: json.error || json.message || `HTTP ${res.status}` };
+        }
+        console.log(`[PujaConnect Mailer] Success:`, json);
+        return json;
+    })
+    .catch(err => {
+        console.warn(`[PujaConnect Mailer] Network error:`, err);
+        return { success: false, error: err.message };
+    });
+}
+window.sendAutomatedEmail = sendAutomatedEmail;
+
 // --- GLOBAL DATA & INITIALIZATION ---
 let currentRole = 'user';
 let activePanditOTP = '';
