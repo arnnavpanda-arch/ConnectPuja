@@ -129,8 +129,8 @@ const createTransporter = () => {
     const user = (process.env.SENDER_EMAIL || process.env.EMAIL_USER || 'bookpujaconnect@gmail.com').trim();
     return nodemailer.createTransport({
         host: 'smtp.gmail.com',
-        port: 465,
-        secure: true,
+        port: 587,
+        secure: false, // true for 465, false for other ports (uses STARTTLS)
         auth: { user, pass },
         tls: { rejectUnauthorized: false },
         connectionTimeout: 10000,
@@ -392,7 +392,7 @@ app.post('/api/pujas', async (req, res) => {
     }
 });
 
-// 6. DIRECT EMAIL ENDPOINT
+// 6. DIRECT EMAIL ENDPOINT - ALL 8 AUTOMATED VEDIC EMAIL TYPES
 app.post('/api/send-email', async (req, res) => {
     try {
         const { to, type, data } = req.body;
@@ -402,16 +402,161 @@ app.post('/api/send-email', async (req, res) => {
         let html = (data && (data.html || data.message)) || `<p>PujaConnect notification for ${to}</p>`;
 
         if (type === 'otp') {
-            subject = `PujaConnect Login OTP: ${(data && data.otp) || '1234'}`;
-            html = `<div style="font-family:Georgia,serif;padding:25px;border:1px solid #d99a19;border-radius:12px;text-align:center;">
-                <h1 style="color:#6a1a24;">🕉️ PujaConnect</h1>
-                <h3>Your Login One-Time Password (OTP)</h3>
-                <div style="font-size:32px;font-weight:bold;letter-spacing:6px;color:#6a1a24;margin:20px 0;">${(data && data.otp) || '1234'}</div>
-                <p>Valid for 10 minutes.</p>
+            const otpCode = (data && data.otp) || '1234';
+            subject = `PujaConnect Login OTP: ${otpCode} 🕉️`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 520px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 26px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">Secure Pandit Verification</p>
+                </div>
+                <h3 style="color: #6a1a24; text-align: center;">Your Login One-Time Password (OTP)</h3>
+                <p style="font-size: 14px; color: #555; text-align: center;">
+                    Please enter the following 4-digit verification code to securely access your Pandit Dashboard:
+                </p>
+                <div style="text-align: center; margin: 25px 0;">
+                    <span style="font-size: 34px; font-weight: bold; letter-spacing: 8px; color: #6a1a24; background: #fdf3e7; padding: 12px 28px; border: 2px dashed #d99a19; border-radius: 8px; display: inline-block;">
+                        ${otpCode}
+                    </span>
+                </div>
+                <p style="font-size: 12px; color: #777; text-align: center; line-height: 1.5;">
+                    This OTP is valid for 10 minutes. If you did not request this login code, please ignore this email.
+                </p>
+                <div style="border-top: 1px solid #ebd9c8; margin-top: 25px; padding-top: 15px; text-align: center; font-size: 12px; color: #888;">
+                    With Divine Blessings,<br><strong>PujaConnect Vedic Team</strong>
+                </div>
+            </div>`;
+        } else if (type === 'booking_confirmed' || type === 'short_puja_confirmation') {
+            subject = `Puja Booking Confirmation: ${data.service || 'Ceremony'} (${data.bookingId || data.id || 'Confirmed'}) 🙏`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">Divine Ceremony Booking Confirmed</p>
+                </div>
+                <h2 style="color: #2e7d32;">Booking Confirmed! 🙏</h2>
+                <p style="font-size: 15px; color: #444; line-height: 1.6;">
+                    Namaste <strong>${data.userName || data.customerName || 'Devotee'}</strong>, your devotional booking has been successfully scheduled.
+                </p>
+                <div style="background: #f7ede2; padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d99a19;">
+                    <p style="margin: 4px 0;"><strong>Booking ID:</strong> ${data.bookingId || data.id || 'N/A'}</p>
+                    <p style="margin: 4px 0;"><strong>Sacred Puja:</strong> ${data.service || 'Vedic Ritual'}</p>
+                    <p style="margin: 4px 0;"><strong>Date & Time:</strong> ${data.date || 'Scheduled'} (${data.time || '10:00 AM'})</p>
+                    <p style="margin: 4px 0;"><strong>Location:</strong> ${data.district || 'Your Registered Address'}</p>
+                    <p style="margin: 4px 0;"><strong>Assigned Pandit:</strong> ${data.panditName || 'Verified Pandit Ji'}</p>
+                    <p style="margin: 4px 0;"><strong>Dakshina / Fee:</strong> ₹${data.fee || 1199}</p>
+                </div>
+                <p style="font-size: 13px; color: #666; text-align: center; margin-top: 25px;">
+                    May Lord's blessings bring peace, health, and prosperity to your entire family.
+                </p>
+            </div>`;
+        } else if (type === 'long_puja_assigned') {
+            subject = `New Long Puja Assignment: ${data.pujaName} (${data.id}) 🕉️`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">Pandit Assignment Invitation</p>
+                </div>
+                <h2 style="color: #6a1a24;">Namaste Pandit Ji 🙏</h2>
+                <p style="font-size: 14px; color: #444; line-height: 1.6;">
+                    You have been assigned to lead an auspicious Long Puja ceremony in <strong>${data.district}</strong>:
+                </p>
+                <div style="background: #fdf3e7; padding: 18px; border-radius: 8px; margin: 20px 0; border: 1px solid #eed6ba;">
+                    <p style="margin: 4px 0;"><strong>Request ID:</strong> ${data.id}</p>
+                    <p style="margin: 4px 0;"><strong>Ceremony:</strong> ${data.pujaName}</p>
+                    <p style="margin: 4px 0;"><strong>Date Range:</strong> ${data.fromDate} to ${data.toDate}</p>
+                    <p style="margin: 4px 0;"><strong>Daily Schedule:</strong> ${data.dailyHours || 4} hours/day (Total: ${data.totalHours || 8} hrs)</p>
+                    <p style="margin: 4px 0;"><strong>Required Team:</strong> ${data.requiredPandits || 1} Pandits</p>
+                </div>
+                <p style="font-size: 14px; color: #555;">
+                    Please log into your <strong>PujaConnect Pandit Dashboard</strong> to <strong>Accept</strong> or <strong>Decline</strong> this assignment.
+                </p>
+            </div>`;
+        } else if (type === 'long_puja_approved') {
+            subject = `Long Puja Approved & Pandits Confirmed (${data.id}) 🎉`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #2e7d32; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #2e7d32; font-weight: bold; margin: 5px 0 0;">Ceremony Approved & Team Assigned</p>
+                </div>
+                <h2 style="color: #2e7d32;">Great News! All Pandits Have Accepted 🙏</h2>
+                <p style="font-size: 15px; color: #444; line-height: 1.6;">
+                    Namaste <strong>${data.userName || 'Devotee'}</strong>, all ${data.requiredPandits || 1} verified Pandits have accepted your request for <strong>${data.pujaName}</strong> from <strong>${data.fromDate} to ${data.toDate}</strong>.
+                </p>
+                <div style="background: #eef7ee; padding: 18px; border-radius: 8px; margin: 20px 0; border: 1px solid #c8e6c9;">
+                    <p style="margin: 4px 0;"><strong>Request ID:</strong> ${data.id}</p>
+                    <p style="margin: 4px 0;"><strong>Total Dakshina:</strong> ₹${data.estimatedCost || 0}</p>
+                    <p style="margin: 4px 0;"><strong>20% Advance Payable:</strong> ₹${Math.round((data.estimatedCost || 0) * 0.20)}</p>
+                    <p style="margin: 4px 0;"><strong>Status:</strong> Approved - Ready for Advance Payment</p>
+                </div>
+                <p style="font-size: 14px; color: #555;">
+                    Please log into your <strong>Devotee Dashboard</strong> to complete the 20% advance payment to lock in the dates.
+                </p>
+            </div>`;
+        } else if (type === 'long_puja_rejected') {
+            subject = `Update on Long Puja Request (${data.id}): No Pandits Available`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #dc3545; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                </div>
+                <h2 style="color: #dc3545;">No Pandits Available for Requested Dates</h2>
+                <p style="font-size: 14px; color: #444; line-height: 1.6;">
+                    Namaste <strong>${data.userName || 'Devotee'}</strong>, we regret to inform you that verified Pandits are currently unavailable in <strong>${data.district}</strong> for the dates <strong>${data.fromDate} to ${data.toDate}</strong>.
+                </p>
+                <p style="font-size: 13px; color: #666;">
+                    We sincerely apologize for the inconvenience. You may submit a new request with alternative dates from your dashboard.
+                </p>
+            </div>`;
+        } else if (type === 'payment_receipt') {
+            subject = `Payment Receipt: ${data.pujaName || 'Ceremony'} (₹${data.estimatedCost || data.fee || 0}) 🧾`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #2e7d32; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #2e7d32; font-weight: bold; margin: 5px 0 0;">Official Payment Receipt</p>
+                </div>
+                <h2 style="color: #2e7d32;">Payment Received Successfully! 🎉</h2>
+                <div style="background: #eef7ee; padding: 18px; border-radius: 8px; margin: 20px 0; border: 1px solid #c2e0c2;">
+                    <p style="margin: 4px 0;"><strong>Receipt ID:</strong> RCP-${data.id || Math.floor(1000 + Math.random() * 9000)}</p>
+                    <p style="margin: 4px 0;"><strong>Ceremony:</strong> ${data.pujaName || data.service || 'Puja'}</p>
+                    <p style="margin: 4px 0;"><strong>Amount Paid:</strong> ₹${data.estimatedCost || data.fee || 0}</p>
+                    <p style="margin: 4px 0;"><strong>Payment Status:</strong> Verified & Confirmed</p>
+                </div>
+            </div>`;
+        } else if (type === 'pandit_approved' || type === 'pandit_verification') {
+            subject = 'Stage 1 Approved: Please Upload Documents - PujaConnect 🙏';
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">Stage 1 Pandit Screening Approved</p>
+                </div>
+                <h2 style="color: #6a1a24;">Namaste Pandit ${(data && data.name) || 'Ji'} 🙏</h2>
+                <p style="font-size: 14px; color: #444; line-height: 1.6;">
+                    Congratulations! Your initial screening has been approved by the PujaConnect Admin Team.
+                </p>
+                <div style="background: #fdf3e7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d99a19;">
+                    <p style="margin: 0; font-size: 14px; color: #6a1a24;">
+                        Please log into your <strong>Pandit Dashboard</strong> to upload your <strong>Passport Photo</strong> and <strong>Identity Proof (Aadhaar/PAN)</strong> for final verification.
+                    </p>
+                </div>
             </div>`;
         } else if (type === 'welcome') {
-            subject = 'Welcome to PujaConnect 🙏';
-            html = `<p>Namaste ${(data && data.name) || 'Devotee'}, welcome to PujaConnect!</p>`;
+            subject = 'Welcome to PujaConnect - Account Created 🙏';
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">Divine Vedic Rituals at Your Doorstep</p>
+                </div>
+                <h2 style="color: #6a1a24;">Namaste, ${(data && data.name) || 'Devotee'}! 🙏</h2>
+                <p style="font-size: 15px; color: #444; line-height: 1.6;">
+                    Welcome to <strong>PujaConnect</strong>. Your account has been successfully created. You can now explore sacred pujas and book authentic Vedic ceremonies seamlessly.
+                </p>
+            </div>`;
         }
 
         const result = await sendEmail({ to, subject, html });

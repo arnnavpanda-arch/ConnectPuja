@@ -4981,7 +4981,7 @@ function handleUnifiedLogin(e) {
             }
             otpArea.style.display = 'block';
             document.getElementById('authSubmitBtn').innerText = 'Verify OTP & Enter';
-            return showAppModal("OTP Sent! 📩", `A 4-digit security code was dispatched to:\n${email}\n\n(Verification Code: ${activePanditOTP})`, "✅");
+            return showAppModal("OTP Dispatched! 📩", `A secure 4-digit verification code has been emailed to:\n${email}\n\nPlease check your email inbox (and Spam folder) to enter the code.`, "✉️");
         }
 
         // Step 2: Verify OTP
