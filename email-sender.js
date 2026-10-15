@@ -17,14 +17,18 @@ function sendAutomatedEmail(toEmail, type, data = {}) {
             data: data
         })
     })
-    .then(res => res.json())
-    .then(result => {
-        console.log(`[PujaConnect Mailer] Email sent response:`, result);
-        return result;
+    .then(async res => {
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || json.success === false) {
+            console.warn(`[PujaConnect Mailer] Server returned error:`, json);
+            return { success: false, error: json.error || json.message || `HTTP ${res.status}` };
+        }
+        console.log(`[PujaConnect Mailer] Email sent response:`, json);
+        return json;
     })
     .catch(err => {
         console.warn(`[PujaConnect Mailer] Email send warning:`, err);
-        return null;
+        return { success: false, error: err.message };
     });
 }
 

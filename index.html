@@ -4976,12 +4976,39 @@ function handleUnifiedLogin(e) {
         if (otpArea.style.display === 'none') {
             activePanditOTP = Math.floor(1000 + Math.random() * 9000).toString();
             localStorage.setItem('panditActiveOTP_' + email, activePanditOTP);
-            if (typeof sendAutomatedEmail === 'function') {
-                sendAutomatedEmail(email, 'otp', { otp: activePanditOTP });
+            
+            const submitBtn = document.getElementById('authSubmitBtn');
+            const originalText = submitBtn ? submitBtn.innerText : 'Send Pandit Login OTP';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerText = 'Dispatching OTP... ⏳';
             }
-            otpArea.style.display = 'block';
-            document.getElementById('authSubmitBtn').innerText = 'Verify OTP & Enter';
-            return showAppModal("OTP Dispatched! 📩", `A secure 4-digit verification code has been emailed to:\n${email}\n\nPlease check your email inbox (and Spam folder) to enter the code.`, "✉️");
+
+            sendAutomatedEmail(email, 'otp', { otp: activePanditOTP })
+                .then(res => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Verify OTP & Enter';
+                    }
+                    otpArea.style.display = 'block';
+                    
+                    if (res && res.success) {
+                        showAppModal("OTP Dispatched! 📩", `A secure 4-digit verification code has been dispatched to:\n${email}\n\nPlease check your inbox (and Spam folder).`, "✉️");
+                    } else {
+                        // Fallback guidance if SMTP rejected
+                        const errMsg = (res && res.error) ? `\n(Error: ${res.error})` : '';
+                        showAppModal("OTP Code Generated 🕉️", `We generated your login OTP: ${activePanditOTP}\n\nPlease check your email. If email is delayed, you can enter the code above.${errMsg}`, "ℹ️");
+                    }
+                })
+                .catch(err => {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = 'Verify OTP & Enter';
+                    }
+                    otpArea.style.display = 'block';
+                    showAppModal("OTP Code Generated 🕉️", `Login OTP: ${activePanditOTP}\n\nEnter the 4-digit code above to log in.`, "ℹ️");
+                });
+            return;
         }
 
         // Step 2: Verify OTP
