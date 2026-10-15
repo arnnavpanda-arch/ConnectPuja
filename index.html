@@ -676,6 +676,60 @@ input:checked + .slider:before { transform: translateX(20px); }
 .btn-success { background: #2e7d32; color: white; border: none; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size:15px;}
 .btn-danger { background: white; color: #c62828; border: 1px solid #c62828; padding: 12px 25px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size:15px;}
 
+/* ADMIN MOBILE RESPONSIVE UPGRADE & BOTTOM NAVIGATION */
+@media (max-width: 768px) {
+    #admin-layout { flex-direction: column; }
+    #admin-layout .sidebar { display: none !important; }
+    #admin-layout .main-area { width: 100vw; height: 100vh; overflow: hidden; }
+    #admin-layout .top-nav { padding: 0 15px; height: 60px; }
+    #admin-layout .top-nav .search-bar { width: 160px; padding: 6px 10px; }
+    #admin-layout .content-wrapper { padding: 15px 15px 85px 15px !important; }
+    #admin-layout .stat-cards { grid-template-columns: 1fr 1fr; gap: 10px; }
+    #admin-layout .stat-card { padding: 15px; gap: 10px; }
+    #admin-layout .stat-card .icon { padding: 10px; font-size: 22px; }
+    #admin-layout .stat-card h3 { font-size: 20px; }
+    #admin-layout .data-table-container { overflow-x: auto; }
+}
+
+.admin-mobile-footer {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 64px;
+    background: #ffffff;
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.12);
+    border-top: 1px solid var(--border);
+    z-index: 999999;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 768px) {
+    .admin-mobile-footer { display: flex; align-items: stretch; }
+}
+.admin-mobile-footer::-webkit-scrollbar { display: none; }
+.admin-nav-item {
+    flex: 1 0 54px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 4px 2px;
+    gap: 2px;
+    transition: 0.2s;
+    user-select: none;
+    white-space: nowrap;
+}
+.admin-nav-item i { font-size: 20px; line-height: 1; }
+.admin-nav-item.active { color: #d99a19; }
+.admin-nav-item:active { background: #fff8ed; }
+
 </style>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
@@ -1093,10 +1147,7 @@ input:checked + .slider:before { transform: translateX(20px); }
             <div class="menu-item" onclick="switchTab('tab-settings', this)">
                 <i class="material-icons">settings</i> Settings
             </div>
-            <div class="menu-item" onclick="closeAdminView()" style="margin-top:auto; border-top:1px solid rgba(255,255,255,0.08); color:#ffd166;">
-                <i class="material-icons" style="color:#ffd166;">arrow_back</i> View Main Website
-            </div>
-            <div class="menu-item" onclick="logout()">
+            <div class="menu-item" onclick="logout()" style="margin-top:auto; border-top:1px solid rgba(255,255,255,0.08);">
                 <i class="material-icons">logout</i> Logout
             </div>
         </div>
@@ -1389,6 +1440,46 @@ input:checked + .slider:before { transform: translateX(20px); }
 
         </div>
     </div>
+
+    <!-- ADMIN RESPONSIVE BOTTOM FOOTER NAV (MOBILE) -->
+    <div class="admin-mobile-footer" id="adminMobileFooter">
+        <div class="admin-nav-item active" onclick="switchAdminTabMobile('tab-dashboard', this)">
+            <i class="material-icons">dashboard</i>
+            <span>Dashboard</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-bookings', this)">
+            <i class="material-icons">book_online</i>
+            <span>Bookings</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-pandits', this)">
+            <i class="material-icons">people</i>
+            <span>Pandits</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-customers', this)">
+            <i class="material-icons">people_outline</i>
+            <span>Users</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-pujas', this)">
+            <i class="material-icons">spa</i>
+            <span>Pujas</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-longpujas', this)">
+            <i class="material-icons">event_note</i>
+            <span>Long Puja</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-locations', this)">
+            <i class="material-icons">map</i>
+            <span>Locations</span>
+        </div>
+        <div class="admin-nav-item" onclick="switchAdminTabMobile('tab-settings', this)">
+            <i class="material-icons">settings</i>
+            <span>Settings</span>
+        </div>
+        <div class="admin-nav-item" onclick="logout()" style="color:#c62828;">
+            <i class="material-icons">logout</i>
+            <span>Logout</span>
+        </div>
+    </div>
 </div>
 
 <!-- PUJA EDIT MODAL -->
@@ -1498,9 +1589,6 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 <!-- 6. USER DASHBOARD EMBEDDED VIEW -->
 <div id="view-user-dashboard" class="view-section" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:99998; display:none; background:#fff8ed;">
-    <div style="position:absolute; top:12px; right:20px; z-index:100000;">
-        <button onclick="exitToHome()" style="background:#351605; color:#ffd166; border:1px solid #d99a19; padding:8px 18px; border-radius:20px; font-weight:bold; cursor:pointer;">← Back to Main Site</button>
-    </div>
     <iframe id="userDashboardFrame" srcdoc="&lt;!DOCTYPE html&gt;
 &lt;html lang=&quot;en&quot;&gt;
 &lt;head&gt;
@@ -1601,6 +1689,53 @@ tr:hover { background: #fcfcfc; }
     .modal-overlay { position: absolute; background: none; }
     .modal { box-shadow: none; border: none; width: 100%; max-width: 100%; padding: 0; margin: 0; }
 }
+
+/* USER DASHBOARD MOBILE RESPONSIVE UPGRADE & BOTTOM NAVIGATION */
+@media (max-width: 768px) {
+    .sidebar { display: none !important; }
+    .main { width: 100vw; height: 100vh; }
+    .topbar { padding: 0 15px; height: 60px; }
+    .content { padding: 15px 15px 80px 15px !important; }
+    .grid { grid-template-columns: 1fr; gap: 15px; }
+    .sub-tabs { gap: 10px; font-size: 13px; }
+    .table-container { overflow-x: auto; }
+}
+
+.user-mobile-footer {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 60px;
+    background: #ffffff;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    border-top: 1px solid var(--border);
+    z-index: 99999;
+}
+@media (max-width: 768px) {
+    .user-mobile-footer { display: flex; align-items: center; justify-content: space-around; }
+}
+.user-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 6px 0;
+    gap: 3px;
+    transition: 0.2s;
+    user-select: none;
+}
+.user-nav-item i { font-size: 22px; line-height: 1; }
+.user-nav-item.active { color: #d99a19; }
+.user-nav-item:active { background: #fff8ed; }
+
 &lt;/style&gt;
     &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
     &lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
@@ -1772,6 +1907,30 @@ tr:hover { background: #fcfcfc; }
                 &lt;/div&gt;
             &lt;/div&gt;
 
+        &lt;/div&gt;
+
+        &lt;!-- USER MOBILE BOTTOM NAVIGATION FOOTER --&gt;
+        &lt;div class=&quot;user-mobile-footer&quot; id=&quot;userMobileFooter&quot;&gt;
+            &lt;div class=&quot;user-nav-item active&quot; onclick=&quot;switchTabMobile(&#x27;bookings&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;book_online&lt;/i&gt;
+                &lt;span&gt;Bookings&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;user-nav-item&quot; onclick=&quot;switchTabMobile(&#x27;payments&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;receipt_long&lt;/i&gt;
+                &lt;span&gt;Payments&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;user-nav-item&quot; onclick=&quot;switchTabMobile(&#x27;explore&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;search&lt;/i&gt;
+                &lt;span&gt;Find Puja&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;user-nav-item&quot; onclick=&quot;switchTabMobile(&#x27;profile&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;person&lt;/i&gt;
+                &lt;span&gt;Profile&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;user-nav-item&quot; onclick=&quot;logout()&quot; style=&quot;color:#c62828;&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;logout&lt;/i&gt;
+                &lt;span&gt;Logout&lt;/span&gt;
+            &lt;/div&gt;
         &lt;/div&gt;
     &lt;/div&gt;
 &lt;/div&gt;
@@ -1989,9 +2148,48 @@ function logout() {
     if(window.parent &amp;&amp; window.parent.exitToHome){ window.parent.exitToHome(); } else { window.location.href = &quot;/&quot;; };
 }
 
+function switchTab(tabName, element) {
+    document.querySelectorAll(&#x27;.tab-content&#x27;).forEach(tab =&gt; tab.classList.remove(&#x27;active&#x27;));
+    document.querySelectorAll(&#x27;.sidebar .menu-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
+    document.querySelectorAll(&#x27;.user-nav-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
+    
+    const target = document.getElementById(&#x27;tab-&#x27; + tabName);
+    if (target) target.classList.add(&#x27;active&#x27;);
+    if (element) element.classList.add(&#x27;active&#x27;);
+    
+    if (tabName === &#x27;bookings&#x27;) {
+        loadBookings();
+    } else if (tabName === &#x27;payments&#x27;) {
+        loadBookings();
+    } else if (tabName === &#x27;explore&#x27;) {
+        renderExplorePujas();
+    } else if (tabName === &#x27;profile&#x27;) {
+        renderProfileView();
+    }
+}
+
+function switchTabMobile(tabName, element) {
+    switchTab(tabName, null);
+    document.querySelectorAll(&#x27;.user-nav-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
+    if (element) element.classList.add(&#x27;active&#x27;);
+    const content = document.querySelector(&#x27;.content&#x27;);
+    if (content) content.scrollTo({ top: 0, behavior: &#x27;smooth&#x27; });
+}
+
+window.addEventListener(&#x27;message&#x27;, function(e) {
+    if (e.data &amp;&amp; e.data.type === &#x27;SYNC_CLOUD_DATA&#x27;) {
+        if (typeof loadBookings === &#x27;function&#x27;) loadBookings();
+        if (typeof loadUserData === &#x27;function&#x27;) loadUserData();
+    }
+});
+
 window.onload = function() {
     let pandits = JSON.parse(localStorage.getItem(&#x27;adminPandits&#x27;) || &#x27;[]&#x27;);
     let pEmails = new Set(pandits.map(p =&gt; (p.email || &#x27;&#x27;).trim().toLowerCase()));
+
+    if(!currentEmail) {
+        currentEmail = localStorage.getItem(&quot;loggedInUserEmail&quot;);
+    }
 
     if(!currentEmail) {
         let users = JSON.parse(localStorage.getItem(&#x27;regularUsers&#x27;) || &#x27;[]&#x27;);
@@ -3264,9 +3462,6 @@ window.addEventListener(&#x27;pujaBookingsUpdated&#x27;, () =&gt; {
 
 <!-- 7. PANDIT DASHBOARD EMBEDDED VIEW -->
 <div id="view-pandit-dashboard" class="view-section" style="position:fixed; top:0; left:0; width:100vw; height:100vh; z-index:99998; display:none; background:#fff8ed;">
-    <div style="position:absolute; top:12px; right:20px; z-index:100000;">
-        <button onclick="exitToHome()" style="background:#351605; color:#ffd166; border:1px solid #d99a19; padding:8px 18px; border-radius:20px; font-weight:bold; cursor:pointer;">← Back to Main Site</button>
-    </div>
     <iframe id="panditDashboardFrame" srcdoc="&lt;!DOCTYPE html&gt;
 &lt;html lang=&quot;en&quot;&gt;
 &lt;head&gt;
@@ -3368,6 +3563,57 @@ body{background:var(--bg); color:var(--text); height:100vh; overflow:hidden;}
 #customToast.error { border-left-color: #c62828; }
 #customToast.success { border-left-color: #2e7d32; }
 #toastIcon { font-size: 24px; }
+
+/* PANDIT DASHBOARD MOBILE RESPONSIVE UPGRADE & BOTTOM NAVIGATION */
+@media (max-width: 768px) {
+    #main-layout { flex-direction: column; }
+    #main-layout .sidebar { display: none !important; }
+    #main-layout .main-area { width: 100vw; height: 100vh; overflow: hidden; }
+    #main-layout .top-nav { padding: 0 15px; height: 60px; }
+    #main-layout .content-wrapper { padding: 15px 15px 85px 15px !important; }
+    #main-layout .stat-cards { grid-template-columns: 1fr; gap: 10px; }
+    #main-layout .stat-card { padding: 15px; gap: 15px; }
+    #main-layout .form-grid { grid-template-columns: 1fr; gap: 10px; }
+    #main-layout .districts-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    #main-layout .data-table-container { overflow-x: auto; }
+}
+
+.pandit-mobile-footer {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 62px;
+    background: #ffffff;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+    border-top: 1px solid var(--border);
+    z-index: 99999;
+}
+@media (max-width: 768px) {
+    .pandit-mobile-footer { display: flex; align-items: stretch; justify-content: space-around; }
+}
+.pandit-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #666;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    padding: 4px 2px;
+    gap: 2px;
+    transition: 0.2s;
+    user-select: none;
+    white-space: nowrap;
+}
+.pandit-nav-item i { font-size: 20px; line-height: 1; }
+.pandit-nav-item.active { color: #d99a19; }
+.pandit-nav-item:active { background: #fff8ed; }
+
 &lt;/style&gt;
     &lt;script src=&quot;https://cdn.tailwindcss.com&quot;&gt;&lt;/script&gt;
     &lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
@@ -3676,6 +3922,38 @@ body{background:var(--bg); color:var(--text); height:100vh; overflow:hidden;}
             &lt;/div&gt;
 
         &lt;/div&gt;
+
+        &lt;!-- PANDIT MOBILE BOTTOM NAVIGATION FOOTER --&gt;
+        &lt;div class=&quot;pandit-mobile-footer&quot; id=&quot;panditMobileFooter&quot;&gt;
+            &lt;div class=&quot;pandit-nav-item active&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-overview&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;dashboard&lt;/i&gt;
+                &lt;span&gt;Overview&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-bookings&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;event_note&lt;/i&gt;
+                &lt;span&gt;Bookings&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-pricing&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;currency_rupee&lt;/i&gt;
+                &lt;span&gt;Services&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-calendar&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;calendar_month&lt;/i&gt;
+                &lt;span&gt;Availability&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-profile&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;manage_accounts&lt;/i&gt;
+                &lt;span&gt;Profile&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;switchPanditTabMobile(&#x27;tab-earnings&#x27;, this)&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;account_balance_wallet&lt;/i&gt;
+                &lt;span&gt;Earnings&lt;/span&gt;
+            &lt;/div&gt;
+            &lt;div class=&quot;pandit-nav-item&quot; onclick=&quot;logout()&quot; style=&quot;color:#c62828;&quot;&gt;
+                &lt;i class=&quot;material-icons&quot;&gt;logout&lt;/i&gt;
+                &lt;span&gt;Logout&lt;/span&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
     &lt;/div&gt;
 &lt;/div&gt;
 
@@ -3761,8 +4039,15 @@ if (pIndex === -1) {
 let currentPandit = pandits[pIndex] || {};
 
 window.onload = function() {
+    pandits = JSON.parse(localStorage.getItem('adminPandits')) || [];
+    loggedEmail = (localStorage.getItem("loggedInPanditEmail") || loggedEmail || '').trim().toLowerCase();
+    pIndex = pandits.findIndex(x => x.email && x.email.trim().toLowerCase() === loggedEmail);
+    if (pIndex !== -1) {
+        currentPandit = pandits[pIndex];
+    }
+
     if(!currentPandit || !currentPandit.status) {
-        if(window.parent &amp;&amp; window.parent.exitToHome){ window.parent.exitToHome(); } else { window.location.href = &quot;/&quot;; };
+        if(window.parent && window.parent.exitToHome){ window.parent.exitToHome(); } else { window.location.href = "/"; };
         return;
     }
     if(currentPandit.status === &#x27;Stage 1 Approved&#x27; || currentPandit.status === &#x27;Verified&#x27; || currentPandit.status === &#x27;Rejected&#x27; || currentPandit.status === &#x27;Docs Rejected&#x27;) {
@@ -3825,9 +4110,34 @@ function initDashboard() {
 function switchTab(tabId, element) {
     document.querySelectorAll(&#x27;.tab-content&#x27;).forEach(tab =&gt; tab.classList.remove(&#x27;active&#x27;));
     document.querySelectorAll(&#x27;.menu-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
-    document.getElementById(tabId).classList.add(&#x27;active&#x27;);
-    element.classList.add(&#x27;active&#x27;);
+    document.querySelectorAll(&#x27;.pandit-nav-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
+    
+    const target = document.getElementById(tabId);
+    if (target) target.classList.add(&#x27;active&#x27;);
+    if (element) element.classList.add(&#x27;active&#x27;);
+    
+    if (tabId === &#x27;tab-bookings&#x27;) {
+        renderBookings();
+    } else if (tabId === &#x27;tab-pricing&#x27;) {
+        renderPricing();
+    } else if (tabId === &#x27;tab-calendar&#x27;) {
+        renderDaySlots();
+    }
 }
+
+function switchPanditTabMobile(tabId, element) {
+    switchTab(tabId, null);
+    document.querySelectorAll(&#x27;.pandit-nav-item&#x27;).forEach(item =&gt; item.classList.remove(&#x27;active&#x27;));
+    if (element) element.classList.add(&#x27;active&#x27;);
+    const cw = document.querySelector(&#x27;.content-wrapper&#x27;);
+    if (cw) cw.scrollTo({ top: 0, behavior: &#x27;smooth&#x27; });
+}
+
+window.addEventListener(&#x27;message&#x27;, function(e) {
+    if (e.data &amp;&amp; e.data.type === &#x27;SYNC_CLOUD_DATA&#x27;) {
+        if (typeof renderBookings === &#x27;function&#x27;) renderBookings();
+    }
+});
 
 /* --- STAGE 1 LOGIC --- */
 function previewUploadPhoto(event) {
@@ -4588,22 +4898,21 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // URL-based view routing
+    // URL-based and persistent view routing on refresh
     const urlParams = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
     const hash = window.location.hash.toLowerCase();
+    const savedView = localStorage.getItem('activePujaView');
 
-    
-    if (path.includes('/user-dashboard') || urlParams.get('view') === 'user-dashboard' || hash === '#user-dashboard') {
+    if (hash === '#user-dashboard' || path.includes('/user-dashboard') || urlParams.get('view') === 'user-dashboard' || (savedView === 'user-dashboard' && localStorage.getItem('loggedInUserEmail'))) {
         openUserDashboard();
         return;
     }
-    if (path.includes('/pandit-dashboard') || urlParams.get('view') === 'pandit-dashboard' || hash === '#pandit-dashboard') {
+    if (hash === '#pandit-dashboard' || path.includes('/pandit-dashboard') || urlParams.get('view') === 'pandit-dashboard' || (savedView === 'pandit-dashboard' && localStorage.getItem('loggedInPanditEmail'))) {
         openPanditDashboard();
         return;
     }
-
-    if (path.includes('/admin') || urlParams.get('view') === 'admin' || hash === '#admin') {
+    if (hash === '#admin' || path.includes('/admin') || urlParams.get('view') === 'admin' || (savedView === 'admin' && localStorage.getItem('adminLoggedIn') === 'true')) {
         showAdminView();
         return;
     }
@@ -4711,7 +5020,11 @@ function handleDedicatedPanditRegister(e) {
     });
 }
 
-function openUserDashboard() {
+function openUserDashboard(forceReload = false) {
+    if (window.location.hash !== '#user-dashboard') {
+        try { history.replaceState(null, '', '#user-dashboard'); } catch(e) { window.location.hash = 'user-dashboard'; }
+    }
+    localStorage.setItem('activePujaView', 'user-dashboard');
     document.querySelectorAll('.view-section').forEach(sec => sec.style.display = 'none');
     let hdr = document.querySelector('header');
     if (hdr) hdr.style.display = 'none';
@@ -4719,13 +5032,17 @@ function openUserDashboard() {
     if (frameSec) {
         frameSec.style.display = 'block';
         let iframe = document.getElementById('userDashboardFrame');
-        if (iframe && iframe.contentWindow) {
+        if (iframe && iframe.contentWindow && forceReload) {
             iframe.contentWindow.location.reload();
         }
     }
 }
 
-function openPanditDashboard() {
+function openPanditDashboard(forceReload = false) {
+    if (window.location.hash !== '#pandit-dashboard') {
+        try { history.replaceState(null, '', '#pandit-dashboard'); } catch(e) { window.location.hash = 'pandit-dashboard'; }
+    }
+    localStorage.setItem('activePujaView', 'pandit-dashboard');
     document.querySelectorAll('.view-section').forEach(sec => sec.style.display = 'none');
     let hdr = document.querySelector('header');
     if (hdr) hdr.style.display = 'none';
@@ -4733,13 +5050,14 @@ function openPanditDashboard() {
     if (frameSec) {
         frameSec.style.display = 'block';
         let iframe = document.getElementById('panditDashboardFrame');
-        if (iframe && iframe.contentWindow) {
+        if (iframe && iframe.contentWindow && forceReload) {
             iframe.contentWindow.location.reload();
         }
     }
 }
 
 function exitToHome() {
+    localStorage.removeItem('activePujaView');
     let hdr = document.querySelector('header');
     if (hdr) hdr.style.display = 'flex';
     document.querySelectorAll('.view-section').forEach(sec => sec.style.display = 'none');
@@ -5246,6 +5564,10 @@ function closeAppModal() {
 /* MERGED ADMIN PANEL LOGIC & LIFECYCLE           */
 /* ============================================== */
 function showAdminView() {
+    if (window.location.hash !== '#admin') {
+        try { history.replaceState(null, '', '#admin'); } catch(e) { window.location.hash = 'admin'; }
+    }
+    localStorage.setItem('activePujaView', 'admin');
     document.body.classList.add('admin-mode');
     document.querySelectorAll('.view-section').forEach(sec => {
         sec.style.display = 'none';
@@ -5262,12 +5584,16 @@ function showAdminView() {
 }
 
 function closeAdminView() {
+    localStorage.removeItem('activePujaView');
     document.body.classList.remove('admin-mode');
     let mainHeader = document.querySelector('header');
     if (mainHeader) mainHeader.style.display = 'flex';
     let adminView = document.getElementById('view-admin');
     if (adminView) {
         adminView.style.display = 'none';
+    }
+    if (window.history.pushState) {
+        window.history.pushState(null, '', '/');
     }
     switchView('home');
 }
@@ -5399,8 +5725,11 @@ function logout() {
 function switchTab(tabId, element) {
     document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
     document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
-    element.classList.add('active');
+    document.querySelectorAll('.admin-nav-item').forEach(item => item.classList.remove('active'));
+    
+    const tabEl = document.getElementById(tabId);
+    if (tabEl) tabEl.classList.add('active');
+    if (element) element.classList.add('active');
     
     if(tabId === 'tab-pandits') {
         loadPandits();
@@ -5410,7 +5739,16 @@ function switchTab(tabId, element) {
         loadAdminPujas();
     } else if (tabId === 'tab-bookings') {
         loadAdminBookings();
+    } else if (tabId === 'tab-longpujas') {
+        loadLongPujas();
     }
+}
+
+function switchAdminTabMobile(tabId, element) {
+    switchTab(tabId, null);
+    document.querySelectorAll('.admin-nav-item').forEach(item => item.classList.remove('active'));
+    if (element) element.classList.add('active');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function loadAdminBookings() {
@@ -6343,6 +6681,62 @@ function submitPanditAssignment() {
     loadLongPujas();
     showAdminAlert("Pandits Assigned!", "Pandits assigned successfully!\nReal automated notification emails have been dispatched to their inboxes.", "✅");
 }
+
+/* ============================================================== */
+/* MULTI-DEVICE REAL-TIME CLOUD DATA SYNC LOOP (PC / MOBILE / TAB) */
+/* ============================================================== */
+async function syncFromCloudLoop() {
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
+        try {
+            await PujaAPI.syncAllFromCloud();
+            
+            // Forward sync notification to User Dashboard iframe
+            const uFrame = document.getElementById('userDashboardFrame');
+            if (uFrame && uFrame.contentWindow) {
+                try {
+                    uFrame.contentWindow.postMessage({ type: 'SYNC_CLOUD_DATA' }, '*');
+                } catch(e) {}
+            }
+            
+            // Forward sync notification to Pandit Dashboard iframe
+            const pFrame = document.getElementById('panditDashboardFrame');
+            if (pFrame && pFrame.contentWindow) {
+                try {
+                    pFrame.contentWindow.postMessage({ type: 'SYNC_CLOUD_DATA' }, '*');
+                } catch(e) {}
+            }
+            
+            // Refresh in-page views if active
+            const adminLayout = document.getElementById('admin-layout');
+            if (adminLayout && adminLayout.style.display !== 'none') {
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab) {
+                    const id = activeTab.id;
+                    if (id === 'tab-pandits' && typeof loadPandits === 'function') loadPandits();
+                    if (id === 'tab-bookings' && typeof loadAdminBookings === 'function') loadAdminBookings();
+                    if (id === 'tab-customers' && typeof loadCustomers === 'function') loadCustomers();
+                    if (id === 'tab-longpujas' && typeof loadLongPujas === 'function') loadLongPujas();
+                }
+            }
+        } catch(err) {
+            console.warn('[Cloud Sync Poll] Sync error:', err);
+        }
+    }
+}
+
+// Initial sync on startup
+setTimeout(syncFromCloudLoop, 1500);
+
+// Polling interval every 6 seconds to capture changes made on other devices
+setInterval(syncFromCloudLoop, 6000);
+
+// Sync immediately whenever user focuses back to the window or switches tabs
+window.addEventListener('focus', syncFromCloudLoop);
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible') {
+        syncFromCloudLoop();
+    }
+});
 
 </script>
 </body>

@@ -373,6 +373,19 @@ app.get('/api/long-pujas', async (req, res) => {
     }
 });
 
+app.put('/api/long-pujas/:id', async (req, res) => {
+    try {
+        const updated = await LongPujaRequest.findOneAndUpdate(
+            { $or: [{ id: req.params.id }, { _id: mongoose.isValidObjectId(req.params.id) ? req.params.id : null }] },
+            req.body,
+            { new: true }
+        );
+        res.json({ success: true, data: updated });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // 5. PUJAS
 app.get('/api/pujas', async (req, res) => {
     try {
