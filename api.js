@@ -243,19 +243,85 @@ const PujaAPI = {
         }
     },
 
+    async updatePanditProfile(email, profileData) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/pandits/${encodeURIComponent(email)}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(profileData)
+            });
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    },
+
+    async savePuja(pujaData) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/pujas`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pujaData)
+            });
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    },
+
+    async deletePuja(pujaName) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/pujas/${encodeURIComponent(pujaName)}`, {
+                method: 'DELETE'
+            });
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    },
+
+    async getLocations() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/settings/locations`);
+            const data = await res.json();
+            if (data.success && data.data) return data.data;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    async saveLocations(locationsData) {
+        try {
+            const res = await fetch(`${API_BASE_URL}/settings/locations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ value: locationsData })
+            });
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    },
+
     // --- CROSS-DEVICE GLOBAL CLOUD SYNC ---
     // Fetches fresh data from MongoDB and updates local storage on all devices
     async syncAllFromCloud() {
         try {
-            const [pujas, pandits, users, bookings, longPujas] = await Promise.all([
+            const [pujas, pandits, users, bookings, longPujas, locations] = await Promise.all([
                 fetch(`${API_BASE_URL}/pujas`).then(r => r.json()).catch(() => ({})),
                 fetch(`${API_BASE_URL}/pandits`).then(r => r.json()).catch(() => ({})),
                 fetch(`${API_BASE_URL}/auth/users`).then(r => r.json()).catch(() => ({})),
                 fetch(`${API_BASE_URL}/bookings`).then(r => r.json()).catch(() => ({})),
-                fetch(`${API_BASE_URL}/long-pujas`).then(r => r.json()).catch(() => ({}))
+                fetch(`${API_BASE_URL}/long-pujas`).then(r => r.json()).catch(() => ({})),
+                fetch(`${API_BASE_URL}/settings/locations`).then(r => r.json()).catch(() => ({}))
             ]);
 
             let changed = false;
+
+            if (locations && locations.success && locations.data && Object.keys(locations.data).length > 0) {
+                localStorage.setItem('adminApprovedLocations', JSON.stringify(locations.data));
+                changed = true;
+            }
 
             if (pujas && pujas.success && Array.isArray(pujas.data) && pujas.data.length > 0) {
                 localStorage.setItem('globalPujas', JSON.stringify(pujas.data));

@@ -64,32 +64,53 @@ const Pandit = mongoose.models.Pandit || mongoose.model('Pandit', new mongoose.S
     state: { type: String, default: 'Odisha' },
     district: { type: String, default: 'Khordha' },
     city: { type: String, default: 'Bhubaneswar' },
+    location: { type: String, default: 'Bhubaneswar, Odisha' },
+    workingState: { type: String, default: 'Odisha' },
+    workingDistricts: { type: [String], default: ['Khordha'] },
     experience: { type: Number, default: 5 },
+    exp: { type: String, default: '5+ Years' },
+    specialty: { type: String, default: 'Vedic Rituals' },
     bio: { type: String, default: 'Experienced Vedic Pandit performing authentic rituals.' },
     fee: { type: Number, default: 1500 },
     services: { type: [String], default: ['Satyanarayan Puja', 'Griha Pravesh', 'Ganesh Puja'] },
+    availableDays: { type: [String], default: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] },
+    daySlots: { type: mongoose.Schema.Types.Mixed, default: {} },
+    timeSlots: { type: [String], default: ["08:00 AM - 11:00 AM", "04:00 PM - 07:00 PM"] },
+    districtPrices: { type: mongoose.Schema.Types.Mixed, default: {} },
+    photo: { type: String, default: 'https://images.unsplash.com/photo-1544168190-79c15427015f?auto=format&fit=crop&q=80&w=200' },
+    documentUrl: { type: String, default: '' },
+    idDoc: { type: String, default: '' },
     status: { type: String, default: 'Pending Review' },
     verified: { type: Boolean, default: false }
 }, { timestamps: true }));
 
 const Booking = mongoose.models.Booking || mongoose.model('Booking', new mongoose.Schema({
     bookingId: { type: String, required: true, unique: true },
+    id: { type: String },
     userEmail: { type: String, required: true, lowercase: true, trim: true },
+    customerEmail: { type: String, lowercase: true, trim: true },
     userName: { type: String, default: 'Customer' },
+    customerName: { type: String, default: 'Customer' },
     phone: { type: String, default: '' },
     service: { type: String, required: true },
     date: { type: String, required: true },
     time: { type: String, default: '10:00 AM' },
     district: { type: String, required: true },
     panditEmail: { type: String, required: true, lowercase: true, trim: true },
+    panditName: { type: String, default: 'Assigned Pandit' },
     status: { type: String, default: 'Confirmed' },
     fee: { type: Number, default: 1199 },
+    advancePaid: { type: Boolean, default: false },
+    advanceAmount: { type: Number, default: 0 },
+    paymentStatus: { type: String, default: 'Pending' },
+    bookingType: { type: String, default: 'Standard' },
     transactionDate: { type: Date, default: Date.now }
 }, { timestamps: true }));
 
 const LongPujaRequest = mongoose.models.LongPujaRequest || mongoose.model('LongPujaRequest', new mongoose.Schema({
     id: { type: String, required: true, unique: true },
     userEmail: { type: String, required: true, lowercase: true, trim: true },
+    userId: { type: String, lowercase: true, trim: true },
     userName: { type: String, default: 'Devotee' },
     phone: { type: String, default: '' },
     pujaName: { type: String, required: true },
@@ -104,7 +125,10 @@ const LongPujaRequest = mongoose.models.LongPujaRequest || mongoose.model('LongP
     panditStatuses: { type: mongoose.Schema.Types.Mixed, default: {} },
     status: { type: String, default: 'Pending Admin' },
     estimatedCost: { type: Number, default: 0 },
-    paid: { type: Boolean, default: false }
+    paid: { type: Boolean, default: false },
+    advancePaid: { type: Boolean, default: false },
+    advanceAmount: { type: Number, default: 0 },
+    submittedAt: { type: String, default: () => new Date().toISOString() }
 }, { timestamps: true }));
 
 const Puja = mongoose.models.Puja || mongoose.model('Puja', new mongoose.Schema({
@@ -115,7 +139,13 @@ const Puja = mongoose.models.Puja || mongoose.model('Puja', new mongoose.Schema(
     benefits: { type: [String], default: [] },
     type: { type: String, default: 'Short' },
     perHourFee: { type: Number, default: 500 },
-    baseFee: { type: Number, default: 1199 }
+    baseFee: { type: Number, default: 1199 },
+    price: { type: String, default: '₹1,199' }
+}, { timestamps: true }));
+
+const AppSetting = mongoose.models.AppSetting || mongoose.model('AppSetting', new mongoose.Schema({
+    key: { type: String, required: true, unique: true },
+    value: { type: mongoose.Schema.Types.Mixed }
 }, { timestamps: true }));
 
 // --- NODEMAILER GMAIL SMTP ENGINE ---
@@ -389,7 +419,20 @@ app.put('/api/long-pujas/:id', async (req, res) => {
 // 5. PUJAS
 app.get('/api/pujas', async (req, res) => {
     try {
-        const pujas = await Puja.find();
+        let pujas = await Puja.find();
+        if (!pujas || pujas.length === 0) {
+            // Seed defaults into MongoDB if collection is empty
+            const DEFAULT_SEED_PUJAS = [
+                { name: "Satyanarayan Puja", desc: "A powerful puja dedicated to Lord Vishnu for peace, prosperity, and resolving life's difficulties.", image: "https://images.unsplash.com/photo-1574765314051-54c2560b0e51?auto=format&fit=crop&q=80&w=400", longDesc: "This sacred ritual brings peace, prosperity, and spiritual upliftment to your home and family. Performed with strict adherence to Vedic traditions.", benefits: ["Removes obstacles and negative energies", "Brings harmony, health, and wealth", "Purifies the mind"], type: "Short", price: "₹1,499" },
+                { name: "Griha Pravesh", desc: "Purify your new home and invite positive energy before moving in.", image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=400", longDesc: "Griha Pravesh ensures a highly positive vibration for your new dwelling, driving away negative energies.", benefits: ["Ensures peace and happiness in the new house", "Protects from evil forces"], type: "Short", price: "₹2,499" },
+                { name: "Ganesh Puja", desc: "Seek the blessings of Lord Ganesha for success and removing obstacles before any new beginning.", image: "https://images.unsplash.com/photo-1563248881-81d39d919bb1?auto=format&fit=crop&q=80&w=400", longDesc: "Lord Ganesha is revered as the remover of obstacles. This Puja paves the way for success.", benefits: ["Removes all hurdles", "Ensures successful completion of tasks"], type: "Short", price: "₹1,199" },
+                { name: "Rudrabhishek", desc: "A sacred bath offered to Lord Shiva for spiritual upliftment and fulfillment of desires.", image: "https://images.unsplash.com/photo-1620023024823-388b7ccbc0c7?auto=format&fit=crop&q=80&w=400", longDesc: "Rudrabhishek is a highly potent ritual performed for Lord Shiva, involving the offering of Panchamrut.", benefits: ["Grants spiritual peace", "Cures severe ailments and karma doshas"], type: "Short", price: "₹2,100" },
+                { name: "Marriage Puja", desc: "Traditional Vedic wedding rituals performed with absolute authenticity.", image: "https://images.unsplash.com/photo-1583089892943-e02e52f17806?auto=format&fit=crop&q=80&w=400", longDesc: "Experience a fully authentic Vedic Marriage Puja tailored to strict scriptural guidelines.", benefits: ["Blesses the couple with a long, happy married life", "Aligns planetary influences for marital bliss"], type: "Long", perHourFee: 600, price: "₹5,999" },
+                { name: "Namkaran Sanskar", desc: "Auspicious naming ceremony for your newborn to ensure a blessed life.", image: "https://images.unsplash.com/photo-1519689680058-324335c77eba?auto=format&fit=crop&q=80&w=400", longDesc: "A child's name defines their future. The Namkaran Sanskar seeks divine blessings for the newborn.", benefits: ["Confers positive energy to the baby's name", "Invokes blessings of family deities"], type: "Short", price: "₹1,499" }
+            ];
+            await Puja.insertMany(DEFAULT_SEED_PUJAS);
+            pujas = await Puja.find();
+        }
         res.json({ success: true, count: pujas.length, data: pujas });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -398,8 +441,77 @@ app.get('/api/pujas', async (req, res) => {
 
 app.post('/api/pujas', async (req, res) => {
     try {
+        const { name } = req.body;
+        const existing = await Puja.findOne({ name });
+        if (existing) {
+            Object.assign(existing, req.body);
+            await existing.save();
+            return res.json({ success: true, data: existing });
+        }
         const puja = await Puja.create(req.body);
         res.status(201).json({ success: true, data: puja });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.put('/api/pujas/:id', async (req, res) => {
+    try {
+        const puja = await Puja.findOneAndUpdate(
+            { $or: [{ _id: mongoose.isValidObjectId(req.params.id) ? req.params.id : null }, { name: req.params.id }] },
+            req.body,
+            { new: true, upsert: true }
+        );
+        res.json({ success: true, data: puja });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.delete('/api/pujas/:id', async (req, res) => {
+    try {
+        await Puja.findOneAndDelete({
+            $or: [{ _id: mongoose.isValidObjectId(req.params.id) ? req.params.id : null }, { name: req.params.id }]
+        });
+        res.json({ success: true, message: 'Puja deleted from MongoDB' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// 5b. PANDIT PROFILE & AVAILABILITY / PRICING DIRECT MONGODB UPDATES
+app.put('/api/pandits/:email', async (req, res) => {
+    try {
+        const normalizedEmail = req.params.email.toLowerCase().trim();
+        const updated = await Pandit.findOneAndUpdate(
+            { email: normalizedEmail },
+            { $set: req.body },
+            { new: true, upsert: true }
+        );
+        res.json({ success: true, data: updated });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// 5c. SETTINGS & APPROVED LOCATIONS DIRECT MONGODB STORAGE
+app.get('/api/settings/:key', async (req, res) => {
+    try {
+        const setting = await AppSetting.findOne({ key: req.params.key });
+        res.json({ success: true, data: setting ? setting.value : null });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.post('/api/settings/:key', async (req, res) => {
+    try {
+        const setting = await AppSetting.findOneAndUpdate(
+            { key: req.params.key },
+            { key: req.params.key, value: req.body.value },
+            { new: true, upsert: true }
+        );
+        res.json({ success: true, data: setting.value });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }

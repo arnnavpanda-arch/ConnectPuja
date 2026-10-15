@@ -2293,6 +2293,21 @@ function saveProfile() {
         currentUser.name = newName;
         currentUser.phone = newPhone;
         document.getElementById(&quot;headerUserName&quot;).innerText = newName;
+        
+        // Sync to MongoDB Atlas backend database
+        fetch(&#x27;/api/auth/register&#x27;, {
+            method: &#x27;POST&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({
+                name: newName,
+                email: currentEmail,
+                phone: newPhone,
+                state: currentUser.state || &#x27;&#x27;,
+                district: currentUser.district || &#x27;&#x27;,
+                city: currentUser.city || &#x27;&#x27;
+            })
+        }).catch(err =&gt; console.warn(&quot;Failed to sync profile update to MongoDB:&quot;, err));
+
         renderProfileView();
         showAlert(&quot;Profile Updated&quot;, &quot;Your profile details have been successfully saved.&quot;, &quot;✅&quot;);
     }
@@ -2619,6 +2634,14 @@ function cancelBooking(id) {
         if(index &gt; -1) {
             allBookings[index].status = &quot;Cancelled&quot;;
             localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(allBookings));
+            
+            // Sync status to MongoDB Atlas backend
+            fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(id), {
+                method: &#x27;PUT&#x27;,
+                headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+                body: JSON.stringify({ status: &#x27;Cancelled&#x27; })
+            }).catch(err =&gt; console.warn(&quot;Failed to sync cancel to MongoDB:&quot;, err));
+
             loadBookings();
             showAlert(&quot;Booking Cancelled&quot;, &quot;Your booking has been successfully cancelled.&quot;, &quot;❌&quot;);
         }
@@ -2691,6 +2714,14 @@ function confirmReschedule() {
         allBookings[index].time = time;
         allBookings[index].status = &quot;Rescheduled&quot;;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(allBookings));
+        
+        // Sync rescheduled date/time to MongoDB Atlas backend
+        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(targetBookingId), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({ date: date, time: time, status: &quot;Rescheduled&quot; })
+        }).catch(err =&gt; console.warn(&quot;Failed to sync reschedule to MongoDB:&quot;, err));
+
         closeModals();
         loadBookings();
         showAlert(&quot;Booking Rescheduled&quot;, &quot;Your Puja has been successfully rescheduled to &quot; + date + &quot; at &quot; + time, &quot;📅&quot;);
@@ -3270,11 +3301,22 @@ function payTeamAdvance(bookingId) {
 
     let advanceAmount = Math.round((b.fee || 2100) * 0.20);
     showConfirmModal(`Proceed to pay 20% advance (₹${advanceAmount}) before your ceremony? The remaining 80% will be paid after the puja is completed.`, () =&gt; {
+        let advDate = new Date().toISOString();
         b.advancePaid = true;
         b.advanceAmount = advanceAmount;
-        b.advancePaidAt = new Date().toISOString();
+        b.advancePaidAt = advDate;
         b.status = &quot;Confirmed&quot;;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(bookings));
+        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(bookingId), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({ 
+                status: &quot;Confirmed&quot;, 
+                advancePaid: true, 
+                advanceAmount: advanceAmount, 
+                advancePaidAt: advDate 
+            })
+        }).catch(err =&gt; console.warn(&quot;MongoDB advance payment sync failed:&quot;, err));
 
         sendAutomatedEmail(b.customerEmail, &#x27;payment_receipt&#x27;, {
             pujaName: b.service + &quot; (20% Advance)&quot;,
@@ -3296,11 +3338,22 @@ function payTeamRemaining(bookingId) {
 
     let remainingAmount = (b.fee || 2100) - (b.advanceAmount || Math.round((b.fee || 2100) * 0.20));
     showConfirmModal(`Pay the remaining 80% balance (₹${remainingAmount}) for your completed Puja?`, () =&gt; {
+        let finDate = new Date().toISOString();
         b.paymentStatus = &quot;Paid&quot;;
         b.status = &quot;Completed&quot;;
         b.paid = true;
-        b.finalPaidAt = new Date().toISOString();
+        b.finalPaidAt = finDate;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(bookings));
+        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(bookingId), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({ 
+                status: &quot;Completed&quot;, 
+                paymentStatus: &quot;Paid&quot;, 
+                paid: true, 
+                finalPaidAt: finDate 
+            })
+        }).catch(err =&gt; console.warn(&quot;MongoDB final payment sync failed:&quot;, err));
 
         sendAutomatedEmail(b.customerEmail, &#x27;payment_receipt&#x27;, {
             pujaName: b.service + &quot; (Final Payment)&quot;,
@@ -3417,9 +3470,10 @@ function submitDashboardLongPuja() {
     let requests = JSON.parse(localStorage.getItem(&#x27;longPujaRequests&#x27;)) || [];
     let reqId = &quot;LPR-&quot; + Math.floor(1000 + Math.random() * 9000);
     
-    requests.push({
+    let newRequestData = {
         id: reqId,
         userId: currentUser.email,
+        userEmail: currentUser.email,
         userName: currentUser.name,
         phone: currentUser.phone,
         pujaName: currentPujaData.name,
@@ -3435,9 +3489,17 @@ function submitDashboardLongPuja() {
         estimatedCost: estCost,
         paid: false,
         submittedAt: new Date().toISOString()
-    });
+    };
     
+    requests.push(newRequestData);
     localStorage.setItem(&#x27;longPujaRequests&#x27;, JSON.stringify(requests));
+    
+    // Direct MongoDB Atlas backend storage
+    fetch(&#x27;/api/long-pujas&#x27;, {
+        method: &#x27;POST&#x27;,
+        headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+        body: JSON.stringify(newRequestData)
+    }).catch(err =&gt; console.warn(&quot;Failed to save long puja to MongoDB:&quot;, err));
     
     showAlert(&quot;Request Submitted!&quot;, &quot;Long Puja Request submitted successfully. Admins will assign Pandits shortly.&quot;, &quot;🎉&quot;, function() {
         document.getElementById(&quot;explore-detail-view&quot;).style.display = &quot;none&quot;;
@@ -4318,6 +4380,14 @@ function acceptLongPuja(reqId) {
         }
         
         localStorage.setItem(&#x27;longPujaRequests&#x27;, JSON.stringify(allRequests));
+        fetch(&#x27;/api/long-pujas/&#x27; + encodeURIComponent(reqId), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({
+                status: allRequests[idx].status,
+                panditStatuses: allRequests[idx].panditStatuses
+            })
+        }).catch(err =&gt; console.warn(&quot;MongoDB long puja sync failed:&quot;, err));
         renderBookings();
         showToast(&quot;Long Puja Request Accepted! Notification sent.&quot;);
     }
@@ -4331,6 +4401,13 @@ function rejectLongPuja(reqId) {
         allRequests[idx].panditStatuses[currentPandit.email] = &quot;Rejected&quot;;
         
         localStorage.setItem(&#x27;longPujaRequests&#x27;, JSON.stringify(allRequests));
+        fetch(&#x27;/api/long-pujas/&#x27; + encodeURIComponent(reqId), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({
+                panditStatuses: allRequests[idx].panditStatuses
+            })
+        }).catch(err =&gt; console.warn(&quot;MongoDB long puja sync failed:&quot;, err));
         renderBookings();
         showToast(&quot;You have rejected this request. Admin will assign another Pandit.&quot;);
     }
@@ -4362,7 +4439,12 @@ function updateBooking(id, newStatus) {
                 showToast(&quot;Booking Rejected. Notification email sent to devotee.&quot;);
             }
         }
-        if (typeof pushLocalBookingsToServer === &#x27;function&#x27;) pushLocalBookingsToServer();
+        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(cleanTarget), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({ status: newStatus })
+        }).catch(err =&gt; console.warn(&quot;MongoDB booking status update failed:&quot;, err));
+
         renderBookings();
     }
 }
@@ -4373,11 +4455,23 @@ function confirmPanditPayment(id) {
     let bIndex = allBookings.findIndex(x =&gt; (x.id || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim() === cleanTarget);
     
     if(bIndex &gt; -1) {
+        let nowIso = new Date().toISOString();
         allBookings[bIndex].status = &quot;Completed&quot;;
         allBookings[bIndex].paymentStatus = &quot;Paid&quot;;
-        allBookings[bIndex].paymentVerifiedAt = new Date().toISOString();
+        allBookings[bIndex].paymentVerifiedAt = nowIso;
         allBookings[bIndex].paid = true;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(allBookings));
+
+        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(cleanTarget), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify({ 
+                status: &quot;Completed&quot;, 
+                paymentStatus: &quot;Paid&quot;, 
+                paid: true, 
+                paymentVerifiedAt: nowIso 
+            })
+        }).catch(err =&gt; console.warn(&quot;MongoDB booking payment update failed:&quot;, err));
 
         let booking = allBookings[bIndex];
         // Send official payment receipt and completion email to devotee
@@ -4389,8 +4483,6 @@ function confirmPanditPayment(id) {
                 userName: booking.customerName
             });
         }
-
-        if (typeof pushLocalBookingsToServer === &#x27;function&#x27;) pushLocalBookingsToServer();
         renderBookings();
         showToast(&quot;Payment Successful! Puja marked completed and receipt is now available for devotee.&quot;, &quot;success&quot;);
     }
@@ -4799,6 +4891,15 @@ function saveWorkingArea() {
 function savePanditData() {
     pandits[pIndex] = currentPandit;
     localStorage.setItem(&#x27;adminPandits&#x27;, JSON.stringify(pandits));
+    
+    // Save directly to MongoDB Atlas so all devices have pandit availability/prices
+    if (currentPandit &amp;&amp; currentPandit.email) {
+        fetch(&#x27;/api/pandits/&#x27; + encodeURIComponent(currentPandit.email), {
+            method: &#x27;PUT&#x27;,
+            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+            body: JSON.stringify(currentPandit)
+        }).catch(err =&gt; console.warn(&quot;Failed to sync pandit update to MongoDB:&quot;, err));
+    }
 }
 
 function logout() {
@@ -4873,12 +4974,12 @@ const DEFAULT_PANDITS = [
 ];
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Seed initial local storage if needed
-    if (!localStorage.getItem('globalPujas')) {
-        localStorage.setItem('globalPujas', JSON.stringify(DEFAULT_SEED_PUJAS));
-    }
-    if (!localStorage.getItem('adminPandits')) {
-        localStorage.setItem('adminPandits', JSON.stringify(DEFAULT_PANDITS));
+    // Immediately pull fresh state from MongoDB Atlas on all devices
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
+        PujaAPI.syncAllFromCloud().then(() => {
+            renderCards();
+            populateDistrictOptions();
+        }).catch(err => console.warn('Initial cloud sync:', err));
     }
 
     renderCards();
@@ -6117,6 +6218,11 @@ function saveLocations() {
     
     localStorage.setItem("adminApprovedLocations", JSON.stringify(approved));
     
+    // Save directly to MongoDB Atlas so all devices have identical approved locations
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.saveLocations) {
+        PujaAPI.saveLocations(approved).catch(err => console.warn("Failed to sync locations to MongoDB:", err));
+    }
+    
     let buttons = document.querySelectorAll(".btn-primary");
     buttons.forEach(btn => {
         if(btn.innerText.includes("Save Changes")){
@@ -6498,8 +6604,16 @@ function editPuja(index) {
 function removePuja(index) {
     showAdminConfirm("Remove Puja?", "Are you sure you want to remove this Puja? It will disappear from the public site and user dashboard.", "🗑️", function() {
         let pujas = JSON.parse(localStorage.getItem('globalPujas')) || [];
+        if (!pujas[index]) return;
+        let removedName = pujas[index].name;
         pujas.splice(index, 1);
         localStorage.setItem('globalPujas', JSON.stringify(pujas));
+        
+        // Delete from MongoDB Atlas
+        if (typeof PujaAPI !== 'undefined' && PujaAPI.deletePuja) {
+            PujaAPI.deletePuja(removedName).catch(err => console.warn("Failed to delete puja from MongoDB:", err));
+        }
+
         loadAdminPujas();
         showAdminAlert("Puja Removed", "The puja service has been deleted.", "✅");
     });
@@ -6537,7 +6651,6 @@ function savePujaData() {
         perHourFee: type === 'Long' ? parseFloat(perHourFee) : null
     };
 
-    
     if (idx !== "") {
         pujas[idx] = newPuja;
     } else {
@@ -6545,6 +6658,12 @@ function savePujaData() {
     }
     
     localStorage.setItem('globalPujas', JSON.stringify(pujas));
+    
+    // Save directly to MongoDB Atlas
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.savePuja) {
+        PujaAPI.savePuja(newPuja).catch(err => console.warn("Failed to save puja to MongoDB:", err));
+    }
+
     document.getElementById("pujaEditModal").style.display = "none";
     loadAdminPujas();
 }
@@ -6677,6 +6796,16 @@ function submitPanditAssignment() {
     requests[reqIndex] = req;
     
     localStorage.setItem('longPujaRequests', JSON.stringify(requests));
+    
+    // Save updated assignments and status directly to MongoDB Atlas
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.updateLongPuja) {
+        PujaAPI.updateLongPuja(req.id, {
+            assignedPandits: req.assignedPandits,
+            panditStatuses: req.panditStatuses,
+            status: req.status
+        }).catch(err => console.warn("Failed to sync long puja assignment to MongoDB:", err));
+    }
+
     document.getElementById("assignPanditModal").style.display = "none";
     loadLongPujas();
     showAdminAlert("Pandits Assigned!", "Pandits assigned successfully!\nReal automated notification emails have been dispatched to their inboxes.", "✅");
