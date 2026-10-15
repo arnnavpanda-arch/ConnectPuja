@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const nodemailer = require('nodemailer');
 
+const path = require('path');
+
 dotenv.config();
 
 const app = express();
@@ -15,6 +17,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname)));
 
 // --- MONGODB CONNECTION CACHING ---
 let isConnected = false;
@@ -421,10 +424,24 @@ app.post('/api/send-email', async (req, res) => {
     }
 });
 
+// Serve index.html for root and all non-API frontend routes (prevents 'Cannot GET /')
+app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+        return next();
+    }
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
 // Fallback error handler
 app.use((err, req, res, next) => {
     console.error("Global API Error:", err.stack);
     res.status(500).json({ success: false, message: err.message || 'Internal Server Error' });
 });
+
+// Start local port if run directly via `node server.js`
+if (require.main === module) {
+    const PORT = process.env.PORT || 5000;
+    app.listen(PORT, () => console.log(`🚀 PujaConnect server running on port ${PORT}`));
+}
 
 module.exports = app;
