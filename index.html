@@ -4957,12 +4957,29 @@ function handleUnifiedLogin(e) {
         const otpInput = document.getElementById('authOtp').value.trim();
         const otpArea = document.getElementById('panditOtpArea');
 
-        // Check if pandit exists in database
+        // Check if pandit exists in database or admin list
         let currentPanditData = pandits.find(p => p.email && p.email.toLowerCase() === email);
         if (!currentPanditData) {
-            return showAppModal("Account Not Found", "No Pandit account registered with this email. Please register via 'Register as Pandit' first.", "⚠️", () => {
-                switchView('pandit-register');
-            });
+            // Also check regularUsers in case they registered earlier
+            let regUsers = JSON.parse(localStorage.getItem('regularUsers') || '[]');
+            let matchedUser = regUsers.find(u => u.email && u.email.toLowerCase() === email);
+            if (matchedUser) {
+                currentPanditData = {
+                    name: matchedUser.name || 'Pandit Ji',
+                    email: email,
+                    phone: matchedUser.phone || '',
+                    status: 'Pending Review',
+                    location: `${matchedUser.district || 'Khordha'}, ${matchedUser.state || 'Odisha'}`
+                };
+                pandits.push(currentPanditData);
+                localStorage.setItem('adminPandits', JSON.stringify(pandits));
+            } else {
+                return showAppModal("Pandit Account Required 🕉️", "This email is not yet registered as a Pandit.\n\nPlease complete the Pandit Registration form first.", "ℹ️", () => {
+                    switchView('pandit-register');
+                    const dEmail = document.getElementById('dRegEmail');
+                    if (dEmail) dEmail.value = email;
+                });
+            }
         }
 
         // Clean out of regularUsers just in case
