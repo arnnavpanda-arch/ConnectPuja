@@ -19,6 +19,18 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
 
+// --- ANTI-CACHING HEADERS FOR ALL API ENDPOINTS ---
+// Prevents mobile browsers, WebViews, and Vercel Edge from serving stale cached data
+app.use('/api', (req, res, next) => {
+    res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+        'Surrogate-Control': 'no-store'
+    });
+    next();
+});
+
 // --- MONGODB CONNECTION CACHING ---
 let isConnected = false;
 let dbError = null;
@@ -301,9 +313,76 @@ app.post('/api/pandits/register', async (req, res) => {
     }
 });
 
+const DEFAULT_SEED_PANDITS = [
+    {
+        name: "Pandit Ramesh Sharma",
+        email: "ramesh@example.com",
+        phone: "+91 98765 43210",
+        state: "Odisha",
+        district: "Khordha",
+        city: "Bhubaneswar",
+        location: "Bhubaneswar, Odisha",
+        workingState: "Odisha",
+        workingDistricts: ["Khordha", "Cuttack", "Puri"],
+        experience: 12,
+        exp: "12+ Years",
+        specialty: "Marriage, Satyanarayan",
+        bio: "Specializing in Vedic Vivah Samskar and Satyanarayan Katha with authentic mantras.",
+        fee: 1500,
+        services: ["Satyanarayan Puja", "Griha Pravesh", "Marriage Puja", "Ganesh Puja"],
+        status: "Fully Verified",
+        verified: true,
+        photo: "https://images.unsplash.com/photo-1544168190-79c15427015f?auto=format&fit=crop&q=80&w=200"
+    },
+    {
+        name: "Pandit Rajesh Mishra",
+        email: "rajesh@example.com",
+        phone: "+91 98765 43211",
+        state: "Maharashtra",
+        district: "Mumbai City",
+        city: "Mumbai",
+        location: "Mumbai, Maharashtra",
+        workingState: "Maharashtra",
+        workingDistricts: ["Mumbai City", "Mumbai Suburban", "Pune"],
+        experience: 15,
+        exp: "15+ Years",
+        specialty: "Griha Pravesh",
+        bio: "Expert in Vastu Shanti and Griha Pravesh rituals.",
+        fee: 2100,
+        services: ["Griha Pravesh", "Rudrabhishek", "Ganesh Puja", "Satyanarayan Puja"],
+        status: "Fully Verified",
+        verified: true,
+        photo: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=200"
+    },
+    {
+        name: "Pandit Suresh Acharya",
+        email: "suresh@example.com",
+        phone: "+91 98765 43212",
+        state: "Odisha",
+        district: "Puri",
+        city: "Puri",
+        location: "Puri, Odisha",
+        workingState: "Odisha",
+        workingDistricts: ["Puri", "Khordha"],
+        experience: 18,
+        exp: "18+ Years",
+        specialty: "Rudrabhishek & Havans",
+        bio: "Temple priest with extensive knowledge of Rudrabhishek and Vedic Yagnas.",
+        fee: 1800,
+        services: ["Rudrabhishek", "Satyanarayan Puja", "Namkaran Sanskar"],
+        status: "Fully Verified",
+        verified: true,
+        photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200"
+    }
+];
+
 app.get('/api/pandits', async (req, res) => {
     try {
-        const pandits = await Pandit.find().sort({ createdAt: -1 });
+        let pandits = await Pandit.find().sort({ createdAt: -1 });
+        if (!pandits || pandits.length === 0) {
+            await Pandit.insertMany(DEFAULT_SEED_PANDITS);
+            pandits = await Pandit.find().sort({ createdAt: -1 });
+        }
         res.json({ success: true, count: pandits.length, data: pandits });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -329,27 +408,66 @@ app.put('/api/pandits/:id/status', async (req, res) => {
 // 3. BOOKINGS
 app.post('/api/bookings', async (req, res) => {
     try {
-        const { userEmail, userName, phone, service, date, time, district, panditEmail, fee } = req.body;
-        const bookingId = 'BK-' + Math.floor(1000 + Math.random() * 9000);
-        const booking = await Booking.create({
-            bookingId,
-            userEmail: (userEmail || '').trim().toLowerCase(),
-            userName: userName || 'Devotee',
-            phone: phone || '',
-            service,
-            date,
-            time: time || '10:00 AM',
-            district,
-            panditEmail: (panditEmail || '').trim().toLowerCase(),
-            status: 'Confirmed',
-            fee: Number(fee) || 1199,
-            transactionDate: new Date()
-        });
-        sendEmail({
-            to: booking.userEmail,
-            subject: `Puja Booking Confirmation: ${service} (${bookingId}) 🙏`,
-            html: `<p>Namaste ${userName}, your booking for ${service} on ${date} is confirmed!</p>`
-        });
+        const {
+            userEmail, userName, customerEmail, customerName,
+            phone, service, date, time, district,
+            panditEmail, panditName, fee, status,
+            bookingType, advancePaid, advanceAmount, paymentStatus,
+            bookingId: customBookingId, id: customId
+        } = req.body;
+
+        const bookingId = customBookingId || customId || ('PC-' + Math.floor(1000 + Math.random() * 9000));
+        const effectiveUserEmail = (userEmail || customerEmail || '').trim().toLowerCase();
+        const effectiveUserName = (userName || customerName || 'Devotee').trim();
+        const effectivePanditEmail = (panditEmail || '').trim().toLowerCase();
+        const effectiveStatus = status || 'Pending Pandit';
+
+        // Upsert so re-submitting or re-syncing updates cleanly
+        let booking = await Booking.findOne({ $or: [{ bookingId }, { id: bookingId }] });
+        if (booking) {
+            booking.userEmail = effectiveUserEmail || booking.userEmail;
+            booking.customerEmail = effectiveUserEmail || booking.customerEmail;
+            booking.userName = effectiveUserName || booking.userName;
+            booking.customerName = effectiveUserName || booking.customerName;
+            booking.phone = phone || booking.phone;
+            booking.service = service || booking.service;
+            booking.date = date || booking.date;
+            booking.time = time || booking.time;
+            booking.district = district || booking.district;
+            booking.panditEmail = effectivePanditEmail || booking.panditEmail;
+            booking.panditName = panditName || booking.panditName;
+            booking.fee = Number(fee) || booking.fee;
+            if (status) booking.status = status;
+            if (bookingType) booking.bookingType = bookingType;
+            if (advancePaid !== undefined) booking.advancePaid = advancePaid;
+            if (advanceAmount !== undefined) booking.advanceAmount = advanceAmount;
+            if (paymentStatus) booking.paymentStatus = paymentStatus;
+            await booking.save();
+        } else {
+            booking = await Booking.create({
+                bookingId,
+                id: bookingId,
+                userEmail: effectiveUserEmail,
+                customerEmail: effectiveUserEmail,
+                userName: effectiveUserName,
+                customerName: effectiveUserName,
+                phone: phone || '',
+                service: service || 'Vedic Ritual',
+                date: date || new Date().toISOString().split('T')[0],
+                time: time || '10:00 AM',
+                district: district || 'Khordha',
+                panditEmail: effectivePanditEmail,
+                panditName: panditName || 'Assigned Pandit',
+                status: effectiveStatus,
+                fee: Number(fee) || 1199,
+                bookingType: bookingType || 'Standard',
+                advancePaid: advancePaid || false,
+                advanceAmount: advanceAmount || 0,
+                paymentStatus: paymentStatus || 'Pending',
+                transactionDate: new Date()
+            });
+        }
+
         res.status(201).json({ success: true, data: booking });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -365,16 +483,212 @@ app.get('/api/bookings', async (req, res) => {
     }
 });
 
+app.get('/api/bookings/user/:email', async (req, res) => {
+    try {
+        const email = req.params.email.trim().toLowerCase();
+        const bookings = await Booking.find({
+            $or: [{ userEmail: email }, { customerEmail: email }]
+        }).sort({ createdAt: -1 });
+        res.json({ success: true, count: bookings.length, data: bookings });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/api/bookings/pandit/:email', async (req, res) => {
+    try {
+        const email = req.params.email.trim().toLowerCase();
+        const bookings = await Booking.find({ panditEmail: email }).sort({ createdAt: -1 });
+        res.json({ success: true, count: bookings.length, data: bookings });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 app.put('/api/bookings/:id', async (req, res) => {
     try {
+        const id = req.params.id;
         const booking = await Booking.findOneAndUpdate(
-            { $or: [{ bookingId: req.params.id }, { _id: mongoose.isValidObjectId(req.params.id) ? req.params.id : null }] },
-            req.body,
+            { $or: [{ bookingId: id }, { id: id }, { _id: mongoose.isValidObjectId(id) ? id : null }] },
+            { $set: req.body },
             { new: true }
         );
+        if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
         res.json({ success: true, data: booking });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.delete('/api/bookings/:id', async (req, res) => {
+    try {
+        const id = req.params.id;
+        await Booking.findOneAndDelete({
+            $or: [{ bookingId: id }, { id: id }, { _id: mongoose.isValidObjectId(id) ? id : null }]
+        });
+        res.json({ success: true, message: 'Booking deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Batch booking sync endpoint for safe migration from localStorage
+app.post('/api/sync-bookings', async (req, res) => {
+    try {
+        const list = Array.isArray(req.body.bookings) ? req.body.bookings : (Array.isArray(req.body) ? req.body : []);
+        let synced = 0;
+        for (const b of list) {
+            const bId = b.bookingId || b.id || ('PC-' + Math.floor(1000 + Math.random() * 9000));
+            const email = (b.userEmail || b.customerEmail || '').trim().toLowerCase();
+            if (!email) continue;
+            await Booking.findOneAndUpdate(
+                { $or: [{ bookingId: bId }, { id: bId }] },
+                {
+                    $setOnInsert: {
+                        bookingId: bId,
+                        id: bId,
+                        userEmail: email,
+                        customerEmail: email,
+                        userName: b.userName || b.customerName || 'Devotee',
+                        customerName: b.userName || b.customerName || 'Devotee',
+                        phone: b.phone || '',
+                        service: b.service || 'Vedic Ritual',
+                        date: b.date || new Date().toISOString().split('T')[0],
+                        time: b.time || '10:00 AM',
+                        district: b.district || 'Khordha',
+                        panditEmail: (b.panditEmail || '').trim().toLowerCase(),
+                        panditName: b.panditName || 'Assigned Pandit',
+                        status: b.status || 'Pending Pandit',
+                        fee: Number(b.fee) || 1199,
+                        paymentStatus: b.paymentStatus || 'Pending',
+                        advancePaid: b.advancePaid || false,
+                        bookingType: b.bookingType || 'Standard',
+                        transactionDate: b.transactionDate || new Date()
+                    }
+                },
+                { upsert: true, new: true }
+            );
+            synced++;
+        }
+        res.json({ success: true, synced });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/api/booking-updates', async (req, res) => {
+    try {
+        const all = await Booking.find().sort({ updatedAt: -1 });
+        const map = {};
+        all.forEach(b => {
+            const key = b.bookingId || b.id;
+            if (key) map[key] = b;
+        });
+        res.json({ success: true, bookings: map, list: all });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Pandit 1-Click Accept / Reject from Email Link
+app.get('/api/booking-response', async (req, res) => {
+    try {
+        const { id, action } = req.query;
+        if (!id || !action) {
+            return res.status(400).send('<h2 style="font-family:Georgia,serif;text-align:center;color:#b71c1c;margin-top:50px;">Invalid Booking Response Link</h2>');
+        }
+        const cleanId = id.replace('#', '').trim();
+        const booking = await Booking.findOne({
+            $or: [{ bookingId: cleanId }, { id: cleanId }, { _id: mongoose.isValidObjectId(cleanId) ? cleanId : null }]
+        });
+        if (!booking) {
+            return res.status(404).send('<h2 style="font-family:Georgia,serif;text-align:center;color:#b71c1c;margin-top:50px;">Booking Not Found</h2><p style="text-align:center;font-family:Georgia,serif;">This booking may have already been rescheduled or updated.</p>');
+        }
+
+        const isAccept = action.toLowerCase() === 'accept';
+        booking.status = isAccept ? 'Accepted' : 'Rejected';
+        await booking.save();
+
+        const devoteeEmail = booking.userEmail || booking.customerEmail;
+        if (devoteeEmail) {
+            if (isAccept) {
+                sendEmail({
+                    to: devoteeEmail,
+                    subject: `Puja Booking Accepted: ${booking.service} (${booking.bookingId}) 🙏`,
+                    html: `
+                    <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                        <div style="text-align: center; border-bottom: 2px solid #2e7d32; padding-bottom: 15px; margin-bottom: 20px;">
+                            <h1 style="color: #6a1a24; margin: 0; font-size: 26px;">🕉️ PujaConnect</h1>
+                            <p style="color: #2e7d32; font-weight: bold; margin: 5px 0 0;">Booking Accepted by Pandit Ji</p>
+                        </div>
+                        <h2 style="color: #2e7d32;">Auspicious Update: Booking Confirmed! 🙏</h2>
+                        <p style="font-size: 15px; line-height: 1.6;">Namaste <strong>${booking.userName || 'Devotee'}</strong>,</p>
+                        <p style="font-size: 15px; line-height: 1.6;">Pandit <strong>${booking.panditName || 'Assigned Pandit'}</strong> has officially accepted your puja request for <strong>${booking.service}</strong> on <strong>${booking.date} at ${booking.time || '10:00 AM'}</strong> in <strong>${booking.district}</strong>.</p>
+                        <div style="background: #eef7ee; padding: 15px; border-radius: 8px; margin: 20px 0; border: 1px solid #c8e6c9;">
+                            <p style="margin: 4px 0;"><strong>Booking ID:</strong> ${booking.bookingId}</p>
+                            <p style="margin: 4px 0;"><strong>Dakshina / Fee:</strong> ₹${booking.fee}</p>
+                            <p style="margin: 4px 0;"><strong>Status:</strong> Accepted</p>
+                        </div>
+                        <p style="font-size: 13px; color: #666;">Please log into your Devotee Dashboard to view complete details.</p>
+                    </div>`
+                });
+            } else {
+                sendEmail({
+                    to: devoteeEmail,
+                    subject: `Puja Booking Update: ${booking.service} (${booking.bookingId})`,
+                    html: `
+                    <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                        <h2 style="color: #c62828;">Pandit Unavailable for Requested Slot</h2>
+                        <p>Namaste <strong>${booking.userName || 'Devotee'}</strong>,</p>
+                        <p>The assigned Pandit was unavailable for <strong>${booking.service}</strong> on <strong>${booking.date}</strong>. Our Admin team has been notified and will reassign another verified Vedic Pandit shortly.</p>
+                    </div>`
+                });
+            }
+        }
+
+        const actionText = isAccept ? 'Accepted' : 'Rejected';
+        const color = isAccept ? '#2e7d32' : '#c62828';
+        const icon = isAccept ? '✅' : '❌';
+
+        res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>PujaConnect | Booking ${actionText}</title>
+            <style>
+                body { font-family: Georgia, serif; background: #fff8ed; color: #3b2115; margin: 0; padding: 20px; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+                .card { background: white; max-width: 500px; width: 100%; border-radius: 16px; padding: 32px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); text-align: center; border: 1px solid #e8dbcc; }
+                .icon { font-size: 54px; margin-bottom: 12px; }
+                h1 { color: ${color}; margin: 0 0 10px; font-size: 26px; }
+                p { font-size: 15px; line-height: 1.6; color: #555; }
+                .details { background: #faf4ec; border-radius: 10px; padding: 16px; margin: 20px 0; text-align: left; font-size: 14px; border-left: 4px solid #d99a19; }
+                .details p { margin: 6px 0; color: #333; }
+                .btn { display: inline-block; background: #351605; color: #d99a19; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; margin-top: 15px; }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">${icon}</div>
+                <h1>Booking ${actionText}!</h1>
+                <p>Namaste Pandit Ji, your response for booking <strong>#${booking.bookingId}</strong> has been saved directly to MongoDB Atlas.</p>
+                <div class="details">
+                    <p><strong>Ceremony:</strong> ${booking.service}</p>
+                    <p><strong>Devotee:</strong> ${booking.userName || 'Devotee'}</p>
+                    <p><strong>Date & Time:</strong> ${booking.date} at ${booking.time || '10:00 AM'}</p>
+                    <p><strong>Location:</strong> ${booking.district}</p>
+                    <p><strong>Dakshina:</strong> ₹${booking.fee}</p>
+                    <p><strong>Status:</strong> <span style="color:${color};font-weight:bold;">${actionText}</span></p>
+                </div>
+                <p>The Devotee and Admin Dashboards across all devices have been updated automatically in real-time.</p>
+                <a href="/#pandit-dashboard" class="btn">Open Pandit Dashboard</a>
+            </div>
+        </body>
+        </html>
+        `);
+    } catch (err) {
+        res.status(500).send('<h2 style="font-family:Georgia,serif;text-align:center;color:#b71c1c;margin-top:50px;">Error processing request</h2><p style="text-align:center;">' + err.message + '</p>');
     }
 });
 
@@ -495,9 +809,20 @@ app.put('/api/pandits/:email', async (req, res) => {
 });
 
 // 5c. SETTINGS & APPROVED LOCATIONS DIRECT MONGODB STORAGE
+const DEFAULT_LOCATIONS = {
+    "Odisha": ["Khordha", "Cuttack", "Puri", "Ganjam", "Sambalpur", "Balasore"],
+    "Maharashtra": ["Mumbai City", "Mumbai Suburban", "Pune", "Thane", "Nagpur"],
+    "Delhi": ["New Delhi", "Central Delhi", "South Delhi", "North Delhi"],
+    "Karnataka": ["Bengaluru Urban", "Bengaluru Rural", "Mysuru"],
+    "West Bengal": ["Kolkata", "Howrah", "North 24 Parganas"]
+};
+
 app.get('/api/settings/:key', async (req, res) => {
     try {
-        const setting = await AppSetting.findOne({ key: req.params.key });
+        let setting = await AppSetting.findOne({ key: req.params.key });
+        if (!setting && req.params.key === 'locations') {
+            setting = await AppSetting.create({ key: 'locations', value: DEFAULT_LOCATIONS });
+        }
         res.json({ success: true, data: setting ? setting.value : null });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -517,7 +842,7 @@ app.post('/api/settings/:key', async (req, res) => {
     }
 });
 
-// 6. DIRECT EMAIL ENDPOINT - ALL 8 AUTOMATED VEDIC EMAIL TYPES
+// 6. DIRECT EMAIL ENDPOINT - ALL AUTOMATED VEDIC EMAIL TYPES
 app.post('/api/send-email', async (req, res) => {
     try {
         const { to, type, data } = req.body;
@@ -526,7 +851,85 @@ app.post('/api/send-email', async (req, res) => {
         let subject = (data && data.subject) || 'PujaConnect Notification';
         let html = (data && (data.html || data.message)) || `<p>PujaConnect notification for ${to}</p>`;
 
-        if (type === 'otp') {
+        if (type === 'booking_requested' || type === 'new_booking_request') {
+            const bId = (data && (data.bookingId || data.id)) || 'N/A';
+            const siteUrl = process.env.BASE_URL || 'https://connect-puja.vercel.app';
+            const acceptUrl = `${siteUrl}/api/booking-response?id=${encodeURIComponent(bId)}&action=accept`;
+            const rejectUrl = `${siteUrl}/api/booking-response?id=${encodeURIComponent(bId)}&action=reject`;
+            subject = `New Booking Request: ${(data && data.service) || 'Puja'} (${bId}) - 1-Click Accept/Reject 🙏`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #d99a19; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #d99a19; font-weight: bold; margin: 5px 0 0;">New Puja Booking Offer</p>
+                </div>
+                <h2 style="color: #6a1a24;">Namaste Pandit Ji 🙏</h2>
+                <p style="font-size: 15px; line-height: 1.6; color: #444;">
+                    A devotee has chosen you to perform an auspicious ceremony. Please review the details below and respond with 1-Click:
+                </p>
+                <div style="background: #fdf3e7; padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #d99a19;">
+                    <p style="margin: 5px 0;"><strong>Booking ID:</strong> #${bId}</p>
+                    <p style="margin: 5px 0;"><strong>Devotee:</strong> ${(data && (data.customerName || data.userName)) || 'Devotee'}</p>
+                    <p style="margin: 5px 0;"><strong>Contact Phone:</strong> ${(data && data.phone) || 'Available in Dashboard'}</p>
+                    <p style="margin: 5px 0;"><strong>Ceremony:</strong> ${(data && data.service) || 'Vedic Ritual'}</p>
+                    <p style="margin: 5px 0;"><strong>Date & Time:</strong> ${(data && data.date) || 'TBD'} at ${(data && data.time) || '10:00 AM'}</p>
+                    <p style="margin: 5px 0;"><strong>Location:</strong> ${(data && data.district) || 'Odisha'}</p>
+                    <p style="margin: 5px 0; font-size: 16px; color: #2e7d32;"><strong>Dakshina / Fee:</strong> ₹${(data && data.fee) || 1199}</p>
+                </div>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="${acceptUrl}" style="display: inline-block; background: #2e7d32; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 16px; margin-right: 15px; box-shadow: 0 4px 10px rgba(46,125,50,0.3);">
+                        ✓ 1-Click Accept
+                    </a>
+                    <a href="${rejectUrl}" style="display: inline-block; background: #c62828; color: #ffffff; text-decoration: none; padding: 14px 24px; border-radius: 8px; font-weight: bold; font-size: 16px; box-shadow: 0 4px 10px rgba(198,40,40,0.3);">
+                        ✕ Reject
+                    </a>
+                </div>
+                <p style="font-size: 12px; color: #777; text-align: center; line-height: 1.5;">
+                    Clicking Accept will immediately confirm this booking in MongoDB Atlas and notify the devotee across all devices.
+                </p>
+                <div style="border-top: 1px solid #ebd9c8; margin-top: 25px; padding-top: 15px; text-align: center; font-size: 12px; color: #888;">
+                    With Divine Blessings,<br><strong>PujaConnect Vedic Team</strong>
+                </div>
+            </div>`;
+        } else if (type === 'booking_accepted') {
+            subject = `Booking Accepted by Pandit: ${(data && data.service) || 'Ceremony'} (${(data && (data.bookingId || data.id)) || 'Confirmed'}) 🙏`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #2e7d32; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                    <p style="color: #2e7d32; font-weight: bold; margin: 5px 0 0;">Pandit Accepted Offer</p>
+                </div>
+                <h2 style="color: #2e7d32;">Auspicious News! Booking Accepted 🙏</h2>
+                <p style="font-size: 15px; line-height: 1.6; color: #444;">
+                    Namaste <strong>${(data && (data.customerName || data.userName)) || 'Devotee'}</strong>, your booking for <strong>${(data && data.service) || 'Puja'}</strong> on <strong>${(data && data.date) || ''} at ${(data && data.time) || '10:00 AM'}</strong> has been officially accepted by Pandit <strong>${(data && data.panditName) || 'Assigned Pandit'}</strong>.
+                </p>
+                <div style="background: #eef7ee; padding: 18px; border-radius: 8px; margin: 20px 0; border: 1px solid #c8e6c9;">
+                    <p style="margin: 4px 0;"><strong>Booking ID:</strong> #${(data && (data.bookingId || data.id)) || 'N/A'}</p>
+                    <p style="margin: 4px 0;"><strong>Pandit Name:</strong> ${(data && data.panditName) || 'Assigned Pandit'}</p>
+                    <p style="margin: 4px 0;"><strong>Pandit Phone:</strong> ${(data && data.panditPhone) || 'Available in Dashboard'}</p>
+                    <p style="margin: 4px 0;"><strong>Dakshina / Fee:</strong> ₹${(data && data.fee) || 1199}</p>
+                    <p style="margin: 4px 0;"><strong>Status:</strong> Accepted</p>
+                </div>
+                <p style="font-size: 13px; color: #666; text-align: center;">
+                    Please log into your Devotee Dashboard to prepare for your sacred ceremony.
+                </p>
+            </div>`;
+        } else if (type === 'booking_rejected') {
+            subject = `Update on Booking Request: ${(data && data.service) || 'Ceremony'} (${(data && (data.bookingId || data.id)) || ''})`;
+            html = `
+            <div style="font-family: Georgia, serif; max-width: 600px; margin: auto; padding: 25px; border: 1px solid #e0d0c0; border-radius: 12px; background: #fffcf8;">
+                <div style="text-align: center; border-bottom: 2px solid #dc3545; padding-bottom: 15px; margin-bottom: 20px;">
+                    <h1 style="color: #6a1a24; margin: 0; font-size: 28px;">🕉️ PujaConnect</h1>
+                </div>
+                <h2 style="color: #dc3545;">Pandit Unavailable for Requested Slot</h2>
+                <p style="font-size: 15px; line-height: 1.6; color: #444;">
+                    Namaste <strong>${(data && (data.customerName || data.userName)) || 'Devotee'}</strong>, the requested Pandit is currently unavailable for <strong>${(data && data.service) || 'Puja'}</strong> on <strong>${(data && data.date) || ''}</strong>.
+                </p>
+                <p style="font-size: 14px; color: #555;">
+                    Our Admin team has been notified and will reassign another verified Vedic Pandit in ${(data && data.district) || 'your area'}. You will receive an instant email update as soon as a new Pandit is assigned!
+                </p>
+            </div>`;
+        } else if (type === 'otp') {
             const otpCode = (data && data.otp) || '1234';
             subject = `PujaConnect Login OTP: ${otpCode} 🕉️`;
             html = `

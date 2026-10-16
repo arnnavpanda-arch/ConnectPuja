@@ -2,15 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="window.addEventListener('message', function(e) {
-    if (e.data &amp;&amp; e.data.type === 'SYNC_CLOUD_DATA') {
-        if (typeof syncUserFromCloud === 'function') syncUserFromCloud();
-        else {
-            if (typeof loadUserData === 'function') loadUserData();
-            if (typeof loadBookings === 'function') loadBookings();
-        }
-    }
-});dth=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PujaConnect | Divine Vedic Services</title>
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <script src="api.js"></script>
@@ -1604,6 +1596,8 @@ input:checked + .slider:before { transform: translateX(20px); }
 &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
 &lt;title&gt;User Dashboard | PujaConnect&lt;/title&gt;
 &lt;link href=&quot;https://fonts.googleapis.com/icon?family=Material+Icons&quot; rel=&quot;stylesheet&quot;&gt;
+&lt;script src=&quot;api.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
 &lt;style&gt;
 :root {
     --primary: #351605;
@@ -2207,22 +2201,51 @@ window.onload = function() {
 
 async function syncUserFromCloud() {
     try {
-        if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
-            await PujaAPI.syncAllFromCloud();
+        const api = (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) ? PujaAPI : ((window.parent && window.parent.PujaAPI && window.parent.PujaAPI.syncAllFromCloud) ? window.parent.PujaAPI : null);
+        if (api) {
+            await api.syncAllFromCloud();
         } else {
-            // Direct fetch fallback from MongoDB endpoints
+            const baseUrl = (typeof getApiBaseUrl === 'function') ? getApiBaseUrl() : 'https://connect-puja.vercel.app/api';
             const [uRes, bRes, lpRes] = await Promise.all([
-                fetch('/api/auth/users').then(r =&gt; r.json()).catch(() =&gt; ({})),
-                fetch('/api/bookings').then(r =&gt; r.json()).catch(() =&gt; ({})),
-                fetch('/api/long-pujas').then(r =&gt; r.json()).catch(() =&gt; ({}))
+                fetch(`${baseUrl}/auth/users?_t=${Date.now()}`).then(r => r.json()).catch(() => ({})),
+                fetch(`${baseUrl}/bookings?_t=${Date.now()}`).then(r => r.json()).catch(() => ({})),
+                fetch(`${baseUrl}/long-pujas?_t=${Date.now()}`).then(r => r.json()).catch(() => ({}))
             ]);
-            if (uRes && uRes.success && Array.isArray(uRes.data) && uRes.data.length &gt; 0) {
+            if (uRes && uRes.success && Array.isArray(uRes.data)) {
                 localStorage.setItem('regularUsers', JSON.stringify(uRes.data));
             }
-            if (bRes && bRes.success && Array.isArray(bRes.data) && bRes.data.length &gt; 0) {
-                localStorage.setItem('pujaBookings', JSON.stringify(bRes.data));
+            if (bRes && bRes.success && Array.isArray(bRes.data)) {
+                const map = new Map();
+                bRes.data.forEach(b => {
+                    const id = b.bookingId || b.id || b._id;
+                    if (id) {
+                        map.set(id, {
+                            id: id,
+                            bookingId: id,
+                            customerName: b.userName || b.customerName || 'Devotee',
+                            userName: b.userName || b.customerName || 'Devotee',
+                            customerEmail: (b.userEmail || b.customerEmail || '').trim().toLowerCase(),
+                            userEmail: (b.userEmail || b.customerEmail || '').trim().toLowerCase(),
+                            phone: b.phone || '',
+                            service: b.service,
+                            date: b.date,
+                            time: b.time || '10:00 AM',
+                            district: b.district,
+                            panditEmail: (b.panditEmail || '').trim().toLowerCase(),
+                            panditName: b.panditName || 'Assigned Pandit',
+                            status: b.status || 'Pending Pandit',
+                            fee: b.fee || 1199,
+                            advancePaid: b.advancePaid || false,
+                            paymentStatus: b.paymentStatus || 'Pending',
+                            bookingType: b.bookingType || 'Standard',
+                            paid: b.paid || (b.paymentStatus === 'Paid'),
+                            transactionDate: b.transactionDate || new Date().toISOString()
+                        });
+                    }
+                });
+                localStorage.setItem('pujaBookings', JSON.stringify(Array.from(map.values())));
             }
-            if (lpRes && lpRes.success && Array.isArray(lpRes.data) && lpRes.data.length &gt; 0) {
+            if (lpRes && lpRes.success && Array.isArray(lpRes.data)) {
                 localStorage.setItem('longPujaRequests', JSON.stringify(lpRes.data));
             }
         }
@@ -2232,6 +2255,16 @@ async function syncUserFromCloud() {
         console.warn("syncUserFromCloud error:", err);
     }
 }
+
+window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'SYNC_CLOUD_DATA') {
+        if (typeof syncUserFromCloud === 'function') syncUserFromCloud();
+        else {
+            if (typeof loadUserData === 'function') loadUserData();
+            if (typeof loadBookings === 'function') loadBookings();
+        }
+    }
+});
 
 function showAlert(title, message, icon=&quot;✅&quot;) {
     document.getElementById(&#x27;alertTitle&#x27;).innerText = title;
@@ -2352,7 +2385,11 @@ function deleteProfile() {
 
 function loadBookings() {
     allBookings = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;)) || [];
-    let myBookings = allBookings.filter(b =&gt; b.customerEmail &amp;&amp; currentEmail &amp;&amp; b.customerEmail.trim().toLowerCase() === currentEmail.trim().toLowerCase());
+    let cleanEmail = (currentEmail || &#x27;&#x27;).trim().toLowerCase();
+    let myBookings = allBookings.filter(b =&gt; {
+        let be = (b.customerEmail || b.userEmail || &#x27;&#x27;).trim().toLowerCase();
+        return cleanEmail &amp;&amp; be === cleanEmail;
+    });
     
     // Convert Dates to compare
     let today = new Date();
@@ -3284,28 +3321,37 @@ function confirmBookingSubmit() {
     bookings.push(newBooking);
     localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(bookings));
 
-    // Sync direct booking to Backend API and Database
-    if (typeof PujaAPI !== &#x27;undefined&#x27; &amp;&amp; PujaAPI.createBooking) {
-        PujaAPI.createBooking({
+    // Sync direct booking to MongoDB Atlas via Backend API
+    const api = (typeof PujaAPI !== &#x27;undefined&#x27;) ? PujaAPI : ((window.parent &amp;&amp; window.parent.PujaAPI) ? window.parent.PujaAPI : null);
+    if (api &amp;&amp; api.createBooking) {
+        api.createBooking({
+            id: bookingId,
+            bookingId: bookingId,
             userEmail: currentUser.email,
+            customerEmail: currentUser.email,
             userName: currentUser.name,
+            customerName: currentUser.name,
             phone: currentUser.phone,
             service: currentExplorePuja,
             date: bDate,
             time: bTime,
             district: pendingBookingData.district,
             panditEmail: pendingBookingData.pEmail,
+            panditName: pendingBookingData.pName,
+            status: &quot;Pending Pandit&quot;,
             fee: pendingBookingData.fee
         }).catch(err =&gt; console.warn(&quot;Backend create booking err:&quot;, err));
     }
 
     // Send real automated offer email to Pandit with 1-Click Accept / Reject buttons
-    sendAutomatedEmail(pendingBookingData.pEmail, &#x27;booking_requested&#x27;, newBooking);
-
-    // Send immediate acknowledgement email to Devotee
-    sendAutomatedEmail(currentUser.email, &#x27;general&#x27;, {
-        subject: `Booking Request Sent: ${currentExplorePuja} (${bookingId}) 🙏`,
-        message: `Namaste ${currentUser.name},&lt;br&gt;&lt;br&gt;Your puja booking request for &lt;strong&gt;${currentExplorePuja}&lt;/strong&gt; on &lt;strong&gt;${bDate} at ${bTime}&lt;/strong&gt; has been sent to &lt;strong&gt;${pendingBookingData.pName}&lt;/strong&gt;.&lt;br&gt;&lt;br&gt;The Pandit has received an immediate email with 1-Click Accept / Reject buttons. You will receive an instant email update as soon as they respond!`
+    const mailer = (typeof sendAutomatedEmail === &#x27;function&#x27;) ? sendAutomatedEmail : ((window.parent &amp;&amp; window.parent.sendAutomatedEmail) ? window.parent.sendAutomatedEmail : null);
+    if (mailer) {
+        mailer(pendingBookingData.pEmail, &#x27;booking_requested&#x27;, newBooking);
+        mailer(currentUser.email, &#x27;general&#x27;, {
+            subject: `Booking Request Sent: ${currentExplorePuja} (${bookingId}) 🙏`,
+            message: `Namaste ${currentUser.name},&lt;br&gt;&lt;br&gt;Your puja booking request for &lt;strong&gt;${currentExplorePuja}&lt;/strong&gt; on &lt;strong&gt;${bDate} at ${bTime}&lt;/strong&gt; has been sent to &lt;strong&gt;${pendingBookingData.pName}&lt;/strong&gt;.&lt;br&gt;&lt;br&gt;The Pandit has received an immediate email with 1-Click Accept / Reject buttons. You will receive an instant email update as soon as they respond!`
+        });
+    }
     });
 
     closeModals();
@@ -3553,6 +3599,8 @@ window.addEventListener(&#x27;pujaBookingsUpdated&#x27;, () =&gt; {
 &lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1.0&quot;&gt;
 &lt;title&gt;Pandit Dashboard | PujaConnect&lt;/title&gt;
 &lt;link href=&quot;https://fonts.googleapis.com/icon?family=Material+Icons&quot; rel=&quot;stylesheet&quot;&gt;
+&lt;script src=&quot;api.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;email-sender.js&quot;&gt;&lt;/script&gt;
 &lt;style&gt;
 :root {
     --primary: #351605;
@@ -4328,17 +4376,9 @@ function submitDocs(e) {
 
 /* --- BOOKINGS &amp; OVERVIEW --- */
 function getBookings() {
-    let b = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;));
-    if(!b) {
-        // Mock init
-        b = [
-            { id: &quot;BKG-1042&quot;, customerName: &quot;Arjun Kumar&quot;, phone: &quot;+91 9876543210&quot;, date: &quot;2026-10-25&quot;, service: &quot;Satyanarayan Katha&quot;, district: currentPandit.workingDistricts ? currentPandit.workingDistricts[0] : &quot;Bhubaneswar&quot;, panditEmail: currentPandit.email, status: &quot;Pending&quot;, fee: 2100 },
-            { id: &quot;BKG-1030&quot;, customerName: &quot;Priya Das&quot;, phone: &quot;+91 9123456780&quot;, date: &quot;2026-10-20&quot;, service: &quot;Griha Pravesh&quot;, district: currentPandit.workingDistricts ? currentPandit.workingDistricts[0] : &quot;Bhubaneswar&quot;, panditEmail: currentPandit.email, status: &quot;Accepted&quot;, fee: 5100 }
-        ];
-        localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(b));
-    }
-    let cpEmail = (currentPandit.email || (typeof loggedEmail !== undefined ? loggedEmail : ) || ).trim().toLowerCase();
-    return b.filter(x =&gt; x.panditEmail &amp;&amp; cpEmail &amp;&amp; x.panditEmail.trim().toLowerCase() === cpEmail);
+    let b = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;)) || [];
+    let cpEmail = ((currentPandit &amp;&amp; currentPandit.email) || (typeof loggedEmail !== &#x27;undefined&#x27; ? loggedEmail : &#x27;&#x27;) || (localStorage.getItem(&#x27;loggedInPanditEmail&#x27;) || &#x27;&#x27;)).trim().toLowerCase();
+    return b.filter(x =&gt; x &amp;&amp; x.panditEmail &amp;&amp; cpEmail &amp;&amp; x.panditEmail.trim().toLowerCase() === cpEmail);
 }
 
 function renderBookings() {
@@ -4346,7 +4386,7 @@ function renderBookings() {
     
     // Add Long Puja Requests
     let allLongRequests = JSON.parse(localStorage.getItem(&#x27;longPujaRequests&#x27;)) || [];
-    let cpEmail = (currentPandit.email || (typeof loggedEmail !== undefined ? loggedEmail : ) || ).trim().toLowerCase();
+    let cpEmail = ((currentPandit &amp;&amp; currentPandit.email) || (typeof loggedEmail !== &#x27;undefined&#x27; ? loggedEmail : &#x27;&#x27;) || (localStorage.getItem(&#x27;loggedInPanditEmail&#x27;) || &#x27;&#x27;)).trim().toLowerCase();
     let myLongRequests = allLongRequests.filter(r =&gt; {
         if (!r.assignedPandits || !Array.isArray(r.assignedPandits)) return false;
         return r.assignedPandits.some(pEmail =&gt; pEmail &amp;&amp; pEmail.trim().toLowerCase() === cpEmail);
@@ -4492,15 +4532,17 @@ function rejectLongPuja(reqId) {
 function updateBooking(id, newStatus) {
     let allBookings = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;)) || [];
     let cleanTarget = (id || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim();
-    let bIndex = allBookings.findIndex(x =&gt; (x.id || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim() === cleanTarget);
+    let bIndex = allBookings.findIndex(x =&gt; ((x.id || x.bookingId || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim() === cleanTarget));
     if(bIndex &gt; -1) {
         allBookings[bIndex].status = newStatus;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(allBookings));
         
         let booking = allBookings[bIndex];
-        if (booking.customerEmail) {
+        let cEmail = booking.customerEmail || booking.userEmail;
+        const mailer = (typeof sendAutomatedEmail === &#x27;function&#x27;) ? sendAutomatedEmail : ((window.parent &amp;&amp; window.parent.sendAutomatedEmail) ? window.parent.sendAutomatedEmail : null);
+        if (cEmail &amp;&amp; mailer) {
             if (newStatus === &#x27;Accepted&#x27;) {
-                sendAutomatedEmail(booking.customerEmail, &#x27;booking_accepted&#x27;, {
+                mailer(cEmail, &#x27;booking_accepted&#x27;, {
                     ...booking,
                     panditName: currentPandit.name,
                     panditPhone: currentPandit.phone || &#x27;&#x27;,
@@ -4508,18 +4550,18 @@ function updateBooking(id, newStatus) {
                 });
                 showToast(&quot;Booking Accepted! Confirmation email sent to devotee.&quot;);
             } else if (newStatus === &#x27;Rejected&#x27;) {
-                sendAutomatedEmail(booking.customerEmail, &#x27;booking_rejected&#x27;, {
+                mailer(cEmail, &#x27;booking_rejected&#x27;, {
                     ...booking,
                     panditName: currentPandit.name
                 });
                 showToast(&quot;Booking Rejected. Notification email sent to devotee.&quot;);
             }
         }
-        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(cleanTarget), {
-            method: &#x27;PUT&#x27;,
-            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
-            body: JSON.stringify({ status: newStatus })
-        }).catch(err =&gt; console.warn(&quot;MongoDB booking status update failed:&quot;, err));
+
+        const api = (typeof PujaAPI !== &#x27;undefined&#x27;) ? PujaAPI : ((window.parent &amp;&amp; window.parent.PujaAPI) ? window.parent.PujaAPI : null);
+        if (api &amp;&amp; api.updateBooking) {
+            api.updateBooking(cleanTarget, { status: newStatus }).catch(err =&gt; console.warn(&quot;MongoDB status update err:&quot;, err));
+        }
 
         renderBookings();
     }
@@ -4528,7 +4570,7 @@ function updateBooking(id, newStatus) {
 function confirmPanditPayment(id) {
     let allBookings = JSON.parse(localStorage.getItem(&#x27;pujaBookings&#x27;)) || [];
     let cleanTarget = (id || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim();
-    let bIndex = allBookings.findIndex(x =&gt; (x.id || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim() === cleanTarget);
+    let bIndex = allBookings.findIndex(x =&gt; ((x.id || x.bookingId || &#x27;&#x27;).replace(&#x27;#&#x27;, &#x27;&#x27;).trim() === cleanTarget));
     
     if(bIndex &gt; -1) {
         let nowIso = new Date().toISOString();
@@ -4538,25 +4580,26 @@ function confirmPanditPayment(id) {
         allBookings[bIndex].paid = true;
         localStorage.setItem(&#x27;pujaBookings&#x27;, JSON.stringify(allBookings));
 
-        fetch(&#x27;/api/bookings/&#x27; + encodeURIComponent(cleanTarget), {
-            method: &#x27;PUT&#x27;,
-            headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
-            body: JSON.stringify({ 
+        const api = (typeof PujaAPI !== &#x27;undefined&#x27;) ? PujaAPI : ((window.parent &amp;&amp; window.parent.PujaAPI) ? window.parent.PujaAPI : null);
+        if (api &amp;&amp; api.updateBooking) {
+            api.updateBooking(cleanTarget, { 
                 status: &quot;Completed&quot;, 
                 paymentStatus: &quot;Paid&quot;, 
                 paid: true, 
                 paymentVerifiedAt: nowIso 
-            })
-        }).catch(err =&gt; console.warn(&quot;MongoDB booking payment update failed:&quot;, err));
+            }).catch(err =&gt; console.warn(&quot;MongoDB payment update err:&quot;, err));
+        }
 
         let booking = allBookings[bIndex];
-        // Send official payment receipt and completion email to devotee
-        if (booking.customerEmail) {
-            sendAutomatedEmail(booking.customerEmail, &#x27;payment_receipt&#x27;, {
+        let cEmail = booking.customerEmail || booking.userEmail;
+        const mailer = (typeof sendAutomatedEmail === &#x27;function&#x27;) ? sendAutomatedEmail : ((window.parent &amp;&amp; window.parent.sendAutomatedEmail) ? window.parent.sendAutomatedEmail : null);
+        if (cEmail &amp;&amp; mailer) {
+            mailer(cEmail, &#x27;payment_receipt&#x27;, {
                 pujaName: booking.service,
-                id: booking.id,
+                id: booking.id || booking.bookingId,
+                bookingId: booking.id || booking.bookingId,
                 estimatedCost: booking.fee,
-                userName: booking.customerName
+                userName: booking.customerName || booking.userName
             });
         }
         renderBookings();
@@ -5007,10 +5050,15 @@ window.addEventListener(&#x27;pujaBookingsUpdated&#x27;, () =&gt; {
 // --- CORE AUTOMATED EMAIL DISPATCHER (INLINED FOR 100% RELIABILITY) ---
 function sendAutomatedEmail(toEmail, type, data = {}) {
     if (!toEmail) return Promise.resolve(null);
+    const base = (typeof PujaAPI !== 'undefined' && PujaAPI.getBaseUrl) ? PujaAPI.getBaseUrl() : '/api';
     console.log(`[PujaConnect Mailer] Dispatching ${type} to: ${toEmail}...`);
-    return fetch('/api/send-email', {
+    return fetch(`${base}/send-email?_t=${Date.now()}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store'
+        },
         body: JSON.stringify({ to: toEmail, type: type, data: data })
     })
     .then(async res => {
@@ -5049,13 +5097,15 @@ const DEFAULT_PANDITS = [
     { name: "Pandit Suresh Acharya", location: "Puri, Odisha", exp: "18+ Years", specialty: "Rudrabhishek & Havans", status: "Fully Verified", photo: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=200", email: "suresh@example.com" }
 ];
 
-window.addEventListener('DOMContentLoaded', () => {
-    // Immediately pull fresh state from MongoDB Atlas on all devices
-    if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
-        PujaAPI.syncAllFromCloud().then(() => {
-            renderCards();
-            populateDistrictOptions();
-        }).catch(err => console.warn('Initial cloud sync:', err));
+window.addEventListener('DOMContentLoaded', async () => {
+    // 1. Safely migrate existing browser data to MongoDB Atlas without losing records
+    if (typeof PujaAPI !== 'undefined') {
+        if (PujaAPI.migrateLocalStorageToMongoDB) {
+            try { await PujaAPI.migrateLocalStorageToMongoDB(); } catch(err) { console.warn('Migration:', err); }
+        }
+        if (PujaAPI.syncAllFromCloud) {
+            try { await PujaAPI.syncAllFromCloud(); } catch(err) { console.warn('Cloud sync:', err); }
+        }
     }
 
     renderCards();
@@ -5295,6 +5345,14 @@ function renderCards() {
     }
 }
 
+window.addEventListener('pujaDataSynced', () => {
+    if (typeof renderCards === 'function') renderCards();
+    if (typeof populateDistrictOptions === 'function') populateDistrictOptions();
+});
+window.addEventListener('pujaBookingsUpdated', () => {
+    if (typeof loadAdminBookings === 'function') loadAdminBookings();
+});
+
 function renderServicesGrid(list) {
     const servicesGrid = document.getElementById('allServicesGrid');
     if (!servicesGrid) return;
@@ -5458,10 +5516,15 @@ function handleInPageAdminLogin(e) {
     }
 }
 
-function handleUnifiedLogin(e) {
+async function handleUnifiedLogin(e) {
     e.preventDefault();
     const email = document.getElementById('authEmail').value.trim().toLowerCase();
     if (!email) return showAppModal("Email Required", "Please enter your email address.", "⚠️");
+
+    // Pull fresh state from MongoDB Atlas first
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.syncAllFromCloud) {
+        await PujaAPI.syncAllFromCloud();
+    }
 
     let pandits = JSON.parse(localStorage.getItem('adminPandits') || '[]');
     let isPandit = pandits.some(p => p.email && p.email.toLowerCase() === email);
@@ -5561,6 +5624,15 @@ function handleUnifiedLogin(e) {
         // Devotee Login: Check if account exists
         let users = JSON.parse(localStorage.getItem('regularUsers') || '[]');
         let existingUser = users.find(u => u.email && u.email.toLowerCase() === email);
+
+        if (!existingUser && typeof PujaAPI !== 'undefined' && PujaAPI.login) {
+            const loginRes = await PujaAPI.login(email);
+            if (loginRes && loginRes.success && loginRes.user) {
+                existingUser = loginRes.user;
+                users.push(existingUser);
+                localStorage.setItem('regularUsers', JSON.stringify(users));
+            }
+        }
 
         if (!existingUser) {
             return showAppModal("Account Not Found", "No devotee account found with this email.\n\nPlease create an account first before logging in.", "ℹ️", () => {
@@ -6077,6 +6149,7 @@ function submitShortPanditAssignment() {
     if (typeof PujaAPI !== 'undefined' && PujaAPI.updateBooking) {
         PujaAPI.updateBooking(bookingId, {
             panditEmail: p.email,
+            panditName: p.name,
             status: "Confirmed"
         }).catch(err => console.warn("Backend update booking err:", err));
     }
@@ -6744,8 +6817,20 @@ function savePujaData() {
     loadAdminPujas();
 }
 
-function loadLongPujas() {
+async function loadLongPujas() {
     let requests = JSON.parse(localStorage.getItem('longPujaRequests')) || [];
+    if (typeof PujaAPI !== 'undefined' && PujaAPI.getAllLongPujas) {
+        try {
+            const apiReqs = await PujaAPI.getAllLongPujas();
+            if (Array.isArray(apiReqs) && apiReqs.length > 0) {
+                const map = new Map();
+                requests.forEach(r => { if (r && r.id) map.set(r.id, r); });
+                apiReqs.forEach(r => { if (r && r.id) map.set(r.id, { ...(map.get(r.id) || {}), ...r }); });
+                requests = Array.from(map.values());
+                localStorage.setItem('longPujaRequests', JSON.stringify(requests));
+            }
+        } catch(e) {}
+    }
     let tbody = document.querySelector("#longPujasTable tbody");
     tbody.innerHTML = "";
     
